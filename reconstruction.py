@@ -2,22 +2,26 @@ import numpy, theano
 from theano import tensor as T
 
 class ReconstructionModel(object):
-	def __init__(self, num_hyponym_list):
+	def __init__(self, ont_size, vocab_rep):
 		"""
-		num_hyponym_list (list(int)):	Number of hyponyms for concepts in the ontology
+		ont_size (int):	Number of concepts in the ontology
+		word_dim (int):	Dimensionality of word representations
 		"""
-		self.srng = T.shared_randomstreams.RandomStreams(234)
-		init_avgs = [x/2 for x in num_hyponym_list]
-		init_stds = [numpy.sqrt(x/2) for x in num_hyponym_list]
-		self.avgs = theano.shared(value=numpy.asarray(init_avgs), name='avg')
-		self.stds = theano.shared(value=numpy.asarray(init_stds), name='std')
+		numpy_rng = numpy.random.RandomState(12345)
+		_, word_dim = vocab_rep.get_value().shape
+		self.vocab_rep = vocab_rep
+		avg_range = 4 * numpy.sqrt(6. / (ont_size + word_dim))
+		init_avgs = numpy.asarray(numpy_rng.uniform(low = -avg_range, high = avg_range, size = (ont_size, word_dim)))
+		self.avgs = theano.shared(value = init_avgs, name = 'avgs')
+		cov_range = 4 * numpy.sqrt(6. / (ont_size + word_dim + word_dim))
+		init_covs = numpy.asarray(numpy_rng.uniform(low = -cov_range, high = cov_range, size = (ont_size, word_dim, word_dim)))	
+		self.covs = theano.shared(value = init_covs, name = 'covs')
 
-	def get_sym_rec_prob(self, concept_ind):
-		#self.concept_ind = T.iscalar('c')
-		avg, std = self.avgs[concept_ind], self.stds[concept_ind]
-		self.r = self.srng.normal(size=(1,), avg=avg, std=std)[0] # 0 to convert the vector to a scalar
-		self.p_r = 1./(std * numpy.sqrt(2 * numpy.pi )) * T.exp(- (self.r - avg) ** 2/(2 * std ** 2))	
-		return (self.r, self.p_r)
+	def get_sym_rec_prob(self, word_ind, concept_ind):
+		avg, cov = self.avgs[concept_ind], self.covs[concept_ind]
+		word_rep = self.vocab_rep[word_ind]
+		self.p_r = 1. / T.sqrt((2 * numpy.pi) ** 2 * T.nlinalg.det(cov)) * T.exp(- 0.5 * T.dot(T.dot((word_rep - avg), T.nlinalg.matrix_inverse(cov)), (word_rep - avg) ))
+		return self.p_r
 
 	def get_param(self):
-		return [self.avgs, self.stds]
+		return [self.avgs, self.covs]
