@@ -7,6 +7,7 @@ num_slots = num_args + 1
 hyp_hidden_size = 2
 vocab_size = 50
 ont_size = 20
+learning_rate = 0.01
 wc_hidden_sizes = [2] * num_slots
 cc_hidden_sizes = [2] * num_args
 event_ae = EventAE(num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes)
@@ -20,15 +21,20 @@ comp_ex = event_ae.get_sym_complete_expectation(x, y_s)
 post_num = event_ae.get_sym_posterior_num(x, y)
 post_part = event_ae.get_sym_posterior_partition(x, y_s)
 rec_prob = event_ae.get_sym_rec_prob(x, y)
+train_func = event_ae.get_train_func(learning_rate)
 f = theano.function([x, y], enc_energy)
 f1 = theano.function([x, y_s], enc_partition)
 f2 = theano.function([x, y], post_num)
 f4 = theano.function([x, y], rec_prob)
 f3 = theano.function([x, y_s], comp_ex)
 f5 = theano.function([x, y_s], post_part)
-print f(numpy.asarray([0, 2, 2], dtype='int32'), numpy.asarray([1, 0, 0], dtype='int32'))
-print f1(numpy.asarray([0, 2, 2], dtype='int32'), numpy.asarray([[1, 0, 0], [0, 0, 0], [0, 1, 1]], dtype='int32'))
-print f2(numpy.asarray([0, 2, 2], dtype='int32'), numpy.asarray([1, 0, 0], dtype='int32'))
-print f4(numpy.asarray([0, 2, 2], dtype='int32'), numpy.asarray([1, 0, 0], dtype='int32'))
-print f3(numpy.asarray([0, 2, 2], dtype='int32'), numpy.asarray([[1, 0, 0], [0, 0, 0], [0, 1, 1]], dtype='int32'))
-print f5(numpy.asarray([0, 2, 2], dtype='int32'), numpy.asarray([[1, 0, 0], [0, 0, 0], [0, 1, 1]], dtype='int32'))
+x_g = numpy.asarray([0, 2, 2], dtype='int32')
+y_g = numpy.asarray([1, 0, 0], dtype='int32')
+y_s_g = numpy.asarray([[1, 0, 0], [0, 0, 0], [0, 1, 1]], dtype='int32')
+print f(x_g, y_g)
+print f1(x_g, y_s_g)
+print f2(x_g, y_g)
+print f4(x_g, y_g)
+print f3(x_g, y_s_g)
+print f5(x_g, y_s_g)
+print train_func(x_g, y_s_g)
