@@ -36,5 +36,5 @@ class HypernymModel(object):
 		else:
 			raise NotImplementedError
 
-	def get_param(self):
+	def get_params(self):
 		return self.params

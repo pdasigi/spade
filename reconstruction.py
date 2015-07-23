@@ -23,5 +23,5 @@ class ReconstructionModel(object):
 		self.p_r = 1. / T.sqrt((2 * numpy.pi) ** 2 * T.nlinalg.det(cov)) * T.exp(- 0.5 * T.dot(T.dot((word_rep - avg), T.nlinalg.matrix_inverse(cov)), (word_rep - avg) ))
 		return self.p_r
 
-	def get_param(self):
+	def get_params(self):
 		return [self.avgs, self.covs]

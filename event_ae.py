@@ -14,30 +14,37 @@ class EventAE(object):
 		init_ont_rep = numpy.asarray(numpy_rng.uniform(low = -ont_rep_range, high = ont_rep_range, size=(ont_size, concept_dim)) )
 		vocab_rep = theano.shared(value=init_vocab_rep, name='vocab_rep')
 		ont_rep = theano.shared(value=init_ont_rep, name='ont_rep')
+		self.enc_params = []
 		self.hyp_model = HypernymModel('linlayer', hyp_hidden_size, vocab_rep, ont_rep)
+		self.enc_params.extend(self.hyp_model.get_params())
 		self.wc_pref_models = []
 		self.cc_pref_models = []
-		for i in range(num_slots):
-			self.wc_pref_models.append(PreferenceModel('word_concept', 'linlayer', wc_hidden_sizes[i], ont_rep, vocab_rep))
+		self.num_slots = num_args + 1 # +1 for the predicate
+		self.num_args = num_args
+		for i in range(self.num_slots):
+			wc_pref_model = PreferenceModel('word_concept', 'linlayer', wc_hidden_sizes[i], ont_rep, vocab_rep)
+			self.wc_pref_models.append(wc_pref_model)
+			self.enc_params.extend(wc_pref_model.get_params())
 	
 		for i in range(num_args):
-			self.cc_pref_models.append(PreferenceModel('concept_concept', 'linlayer', cc_hidden_sizes[i], ont_rep))
+			cc_pref_model = PreferenceModel('concept_concept', 'linlayer', cc_hidden_sizes[i], ont_rep)
+			self.cc_pref_models.append(cc_pref_model)
+			self.enc_params.extend(cc_pref_model.get_params())
 		self.rec_model = ReconstructionModel(ont_size, vocab_rep)
-		self.num_args = num_args
-		self.num_slots = self.num_args + 1 # +1 for the predicate
-
+		self.rec_params = self.rec_model.get_params()
+		
 	def get_sym_encoder_energy(self, x, y):
 		hsum = T.constant(0)
-		for i in range(num_slots):
+		for i in range(self.num_slots):
 			hsum += self.hyp_model.get_symb_score(x[i], y[i])
 		p_w_c_sum = T.constant(0)
-		for i in range(num_slots):
-			for j in range(num_slots):
+		for i in range(self.num_slots):
+			for j in range(self.num_slots):
 				if i == j:
 					continue
 				p_w_c_sum += self.wc_pref_models[i].get_symb_score(x[i], y[j])
 		p_c_c_sum = T.constant(0)
-		for i in range(num_args):
+		for i in range(self.num_args):
 			p_c_c_sum += self.cc_pref_models[i].get_symb_score(y[0], y[i])
 		return hsum + p_w_c_sum + p_c_c_sum
 
@@ -47,10 +54,6 @@ class EventAE(object):
 		return encoder_partition
 
 	def get_sym_rec_prob(self, x, y):
-		#rec_prob = T.constant(1.0)
-		#for i in range(num_slots):
-		#	_, p_r = self.rec_model.get_sym_rec_prob(x[i], y[i])
-		#	rec_prob *= p_r
 		init_prob = T.constant(1.0, dtype='float64')
 		partial_prods, _ = theano.scan(fn = lambda x_i, y_i, interm_prod: interm_prod * self.rec_model.get_sym_rec_prob(x_i, y_i), outputs_info=init_prob, sequences=[x, y])
 		rec_prob = partial_prods[-1]
@@ -60,7 +63,6 @@ class EventAE(object):
 		enc_energy = self.get_sym_encoder_energy(x, y)
 		rec_prob = self.get_sym_rec_prob(x, y)
 		return T.exp(enc_energy) * rec_prob
-		#return T.exp(enc_energy)
 			
 	def get_sym_posterior_partition(self, x, y_s):
 		partial_sums, _ = theano.scan(fn=lambda y, interm_sum, x_0: interm_sum + self.get_sym_posterior_num(x_0, y), outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=x)
@@ -79,33 +81,3 @@ class EventAE(object):
 		return complete_expectation
 		
 
-num_args = 2
-num_slots = num_args + 1
-hyp_hidden_size = 2
-vocab_size = 50
-ont_size = 20
-wc_hidden_sizes = [2] * num_slots
-cc_hidden_sizes = [2] * num_args
-event_ae = EventAE(num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes)
-
-x = T.ivector('x') # Vector of word indexes in vocabulary
-y = T.ivector('y') # Vector of concept indexes in ontology
-y_s = T.imatrix('y_s') # Matrix with all possible concept combinations
-enc_energy = event_ae.get_sym_encoder_energy(x, y)
-enc_partition = event_ae.get_sym_encoder_partition(x, y_s)
-comp_ex = event_ae.get_sym_complete_expectation(x, y_s)
-post_num = event_ae.get_sym_posterior_num(x, y)
-post_part = event_ae.get_sym_posterior_partition(x, y_s)
-rec_prob = event_ae.get_sym_rec_prob(x, y)
-f = theano.function([x, y], enc_energy)
-f1 = theano.function([x, y_s], enc_partition)
-f2 = theano.function([x, y], post_num)
-f4 = theano.function([x, y], rec_prob)
-f3 = theano.function([x, y_s], comp_ex)
-f5 = theano.function([x, y_s], post_part)
-print f(numpy.asarray([0, 2, 2], dtype='int32'), numpy.asarray([1, 0, 0], dtype='int32'))
-print f1(numpy.asarray([0, 2, 2], dtype='int32'), numpy.asarray([[1, 0, 0], [0, 0, 0], [0, 1, 1]], dtype='int32'))
-print f2(numpy.asarray([0, 2, 2], dtype='int32'), numpy.asarray([1, 0, 0], dtype='int32'))
-print f4(numpy.asarray([0, 2, 2], dtype='int32'), numpy.asarray([1, 0, 0], dtype='int32'))
-print f3(numpy.asarray([0, 2, 2], dtype='int32'), numpy.asarray([[1, 0, 0], [0, 0, 0], [0, 1, 1]], dtype='int32'))
-print f5(numpy.asarray([0, 2, 2], dtype='int32'), numpy.asarray([[1, 0, 0], [0, 0, 0], [0, 1, 1]], dtype='int32'))

@@ -50,6 +50,6 @@ class PreferenceModel(object):
 		pref_score = T.dot( self.score_weight, T.dot(self.proj_weight.T, T.concatenate([ent1_vec, ent2_vec])))
 		return pref_score
 
-	def get_param(self):
+	def get_params(self):
 		return self.params
 
