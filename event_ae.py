@@ -74,10 +74,9 @@ class EventAE(object):
     posterior_partition = self.get_sym_posterior_partition(x, y_s)
     prod_fun = lambda y_0, interm_sum, x_0: interm_sum + \
         self.get_sym_posterior_num(x_0, y_0) * \
-        ( self.get_sym_encoder_energy(x_0, y_0) - T.log(encoder_partition) + \
-          T.log(self.get_sym_rec_prob(x_0, y_0)) )
+        ( self.get_sym_encoder_energy(x_0, y_0) + T.log(self.get_sym_rec_prob(x_0, y_0)) )
     partial_sums, _ = theano.scan(fn=prod_fun, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=x)
-    complete_expectation = partial_sums[-1] / posterior_partition
+    complete_expectation = partial_sums[-1] / posterior_partition - T.log(encoder_partition)
     return complete_expectation
 
   def get_train_func(self, learning_rate):
