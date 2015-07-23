@@ -14,6 +14,7 @@ class EventAE(object):
     init_ont_rep = numpy.asarray(numpy_rng.uniform(low = -ont_rep_range, high = ont_rep_range, size=(ont_size, concept_dim)) )
     vocab_rep = theano.shared(value=init_vocab_rep, name='vocab_rep')
     ont_rep = theano.shared(value=init_ont_rep, name='ont_rep')
+    self.repr_param = [vocab_rep, ont_rep]
     self.enc_params = []
     self.hyp_model = HypernymModel('linlayer', hyp_hidden_size, vocab_rep, ont_rep)
     self.enc_params.extend(self.hyp_model.get_params())
@@ -82,7 +83,7 @@ class EventAE(object):
   def get_train_func(self, learning_rate):
     x, y_s = T.ivector("x"), T.imatrix("y_s")
     em_cost = -self.get_sym_complete_expectation(x, y_s)
-    params = self.enc_params + self.rec_params
+    params = self.repr_param + self.enc_params + self.rec_params
     g_params = T.grad(em_cost, params)
     #train_func = theano.function([x, y_s], [em_cost, g_params], updates={p:p - learning_rate * g for p, g in zip(params, g_params)})
     train_func = theano.function([x, y_s], em_cost, updates=[ (p, p - learning_rate * g) for p, g in zip(params, g_params) ])
