@@ -79,5 +79,8 @@ class EventAE(object):
 		partial_sums, _ = theano.scan(fn=prod_fun, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=x)
 		complete_expectation = partial_sums[-1] / posterior_partition
 		return complete_expectation
+
+	def get_train_func(self):
+		raise NotImplementedError
 		
 
