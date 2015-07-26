@@ -81,11 +81,11 @@ class EventAE(object):
     return complete_expectation
 
   def get_train_func(self, learning_rate):
+    # TODO: Implement AdaGrad
     x, y_s = T.ivector("x"), T.imatrix("y_s")
     em_cost = -self.get_sym_complete_expectation(x, y_s)
     params = self.repr_param + self.enc_params + self.rec_params
     g_params = T.grad(em_cost, params)
-    #train_func = theano.function([x, y_s], [em_cost, g_params], updates={p:p - learning_rate * g for p, g in zip(params, g_params)})
     train_func = theano.function([x, y_s], em_cost, updates=[ (p, p - learning_rate * g) for p, g in zip(params, g_params) ])
     return train_func
 
