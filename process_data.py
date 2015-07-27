@@ -1,4 +1,5 @@
 import codecs, re
+import itertools
 from nltk.corpus import wordnet as wn
 
 class DataProcessor(object):
@@ -11,7 +12,7 @@ class DataProcessor(object):
     self.people_prons = ['they', 'them', 'themselves', 'we', 'ourselves', 'yourselves'] # people.n.01, people.n.03
     self.person_prons = ['you', 'i', 'who', 'whom', 'whoever', 'anyone', 'everyone', 'myself', 'yourself'] # person.n.01
     
-    self.thing_hypernyms = self.get_hypernyms_word('thing')
+    self.thing_hypernyms = self.get_hypernyms_word('thing', syn_cutoff=4)
     self.man_hypernyms = self.get_hypernyms_syn(wn.synset('man.n.01'))
     self.woman_hypernyms = self.get_hypernyms_syn(wn.synset('woman.n.01'))
     self.people_hypernyms = self.get_hypernyms_syn(wn.synset('people.n.01'))
@@ -22,16 +23,19 @@ class DataProcessor(object):
 
     self.misc_hypernyms = set(self.loc_hypernyms).union(self.person_hypernyms)
 
-  def get_hypernyms_syn(self, syn, cutoff=-1):
+  def get_hypernyms_syn(self, syn, path_cutoff=-1):
     hypernyms = []
     for path_list in syn.hypernym_paths():
-      hypernyms.extend([s.name() for s in path_list])
+      pruned_path_list = list(path_list) if path_cutoff == -1 or path_cutoff >= len(path_list) else [x for x in reversed(path_list)][:path_cutoff]
+      hypernyms.extend([s.name() for s in pruned_path_list])
     return set(hypernyms)
 
-  def get_hypernyms_word(self, word, pos='n'):
+  def get_hypernyms_word(self, word, pos='n', syn_cutoff=-1):
     hypernyms = []
-    for syn in wn.synsets(word, pos = pos):
-      hypernyms.extend(list(self.get_hypernyms_syn(syn)))
+    synsets = wn.synsets(word, pos=pos)
+    pruned_synsets = list(synsets) if syn_cutoff == -1 else synsets[:syn_cutoff]
+    for syn in pruned_synsets:
+      hypernyms.extend(list(self.get_hypernyms_syn(syn, path_cutoff=5)))
     return set(hypernyms)
 
   def make_data(self, filename):
@@ -46,7 +50,7 @@ class DataProcessor(object):
     for line in datafile:
       line_parts = line.strip().split('\t')
       pred = line_parts[0]
-      pred_hypernyms = self.get_hypernyms_word(pred, pos='v')
+      pred_hypernyms = self.get_hypernyms_word(pred, pos='v', syn_cutoff=2)
       if len(pred_hypernyms) == 0:
         #print line.strip().encode('utf-8')
         continue
@@ -55,7 +59,6 @@ class DataProcessor(object):
       #print pred
       for i in range(1, len(line_parts), 2):
         label, word = line_parts[i], line_parts[i+1]
-        labeled_args[label] = word
         if label not in self.wanted_args:
           continue
         wrd_lower = word.lower()
@@ -72,7 +75,7 @@ class DataProcessor(object):
         elif wrd_lower in self.person_prons:
           hypernyms = list(self.person_hypernyms)
         elif len(syns) != 0:
-          hypernyms = list(self.get_hypernyms_word(word))
+          hypernyms = list(self.get_hypernyms_word(word, syn_cutoff=2))
         elif re.match('^[12][0-9]{3}$', word) is not None:
           # The argument looks like an year
           hypernyms = list(self.year_hypernyms)
@@ -87,12 +90,12 @@ class DataProcessor(object):
         #print label, word, hypernyms
         #arg_hypernym_lens.append(len(hypernyms))
       #pred_hypernym_lens.append(len(pred_hypernyms))
-      if len(labeled_args) != len(self.wanted_args):
+      if len(labeled_args) < len(self.wanted_args):
         # This means we did not get all the wanted args
         continue
-
       w_datum = [pred]
-
+      #print slot_hypernyms, labeled_args, len(self.wanted_args), len(labeled_args) == len(self.wanted_args)
+      
       if pred not in word_index:
         word_index[pred] = len(word_index)
       for w_label in self.wanted_args:
@@ -114,9 +117,10 @@ class DataProcessor(object):
         w_hyps = word_hypernym_map[w]
         h_inds = [concept_index[y] for y in w_hyps]
         w_hyp_inds.append(h_inds)
-      y_s_datum = [[]]
-      for h_inds in w_hyp_inds:
-        y_s_datum = [ i + [y] for y in h_inds for i in y_s_datum ]
+      #y_s_datum = [[]]
+      #for h_inds in w_hyp_inds:
+      #  y_s_datum = [ i + [y] for y in h_inds for i in y_s_datum ]
+      y_s_datum = [list(l) for l in itertools.product(*w_hyp_inds)]
       y_s_data.append(y_s_datum)        
     #print float(sum(pred_hypernym_lens))/len(pred_hypernym_lens)
     #print float(sum(arg_hypernym_lens))/len(arg_hypernym_lens)
