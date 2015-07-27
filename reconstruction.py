@@ -27,7 +27,7 @@ class ReconstructionModel(object):
     avg, cov_m = self.avgs[concept_ind], self.cov_multiples[concept_ind]
     cov = T.eye(self.word_dim) * T.abs_(cov_m)
     word_rep = self.vocab_rep[word_ind]
-    self.p_r = 1. / T.sqrt((2 * numpy.pi) ** 2 * T.nlinalg.det(cov)) * T.exp(- 0.5 * T.dot(T.dot((word_rep - avg), T.nlinalg.matrix_inverse(cov)), (word_rep - avg) ))
+    self.p_r = 1. / T.sqrt(((2 * numpy.pi) ** self.word_dim) * T.nlinalg.det(cov)) * T.exp(- 0.5 * T.dot(T.dot((word_rep - avg), T.nlinalg.matrix_inverse(cov)), (word_rep - avg) ))
     return self.p_r
 
   def get_params(self):
