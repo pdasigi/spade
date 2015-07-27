@@ -89,3 +89,8 @@ class EventAE(object):
     train_func = theano.function([x, y_s], em_cost, updates=[ (p, p - learning_rate * g) for p, g in zip(params, g_params) ])
     return train_func
 
+  def get_posterior_func(self):
+    x, y = T.ivectors('x', 'y')
+    posterior_func = theano.function([x, y], self.get_sym_posterior_num(x, y))
+    return posterior_func
+
