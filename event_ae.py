@@ -1,5 +1,6 @@
 import theano, numpy
 from theano import tensor as T
+from theano.ifelse import ifelse
 
 from hypernymy import HypernymModel
 from preferences import PreferenceModel
@@ -73,9 +74,13 @@ class EventAE(object):
   def get_sym_complete_expectation(self, x, y_s):
     encoder_partition = self.get_sym_encoder_partition(x, y_s)
     posterior_partition = self.get_sym_posterior_partition(x, y_s)
-    prod_fun = lambda y_0, interm_sum, x_0: interm_sum + \
-        self.get_sym_posterior_num(x_0, y_0) * \
-        ( self.get_sym_encoder_energy(x_0, y_0) + T.log(self.get_sym_rec_prob(x_0, y_0)) )
+    def prod_fun(y_0, interm_sum, x_0): 
+      post_num = self.get_sym_posterior_num(x_0, y_0)
+      log_post_num = self.get_sym_encoder_energy(x_0, y_0) + T.log(self.get_sym_rec_prob(x_0, y_0))
+      return interm_sum + ifelse(T.le(post_num, 0), T.constant(0.0, dtype='float64'), post_num * log_post_num)
+    #prod_fun = lambda y_0, interm_sum, x_0: interm_sum + \
+    #    self.get_sym_posterior_num(x_0, y_0) * \
+    #    ( self.get_sym_encoder_energy(x_0, y_0) + T.log(self.get_sym_rec_prob(x_0, y_0)) )
     partial_sums, _ = theano.scan(fn=prod_fun, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=x)
     complete_expectation = partial_sums[-1] / posterior_partition - T.log(encoder_partition)
     return complete_expectation
