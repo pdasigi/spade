@@ -38,3 +38,7 @@ class HypernymModel(object):
 
   def get_params(self):
     return self.params
+
+  def set_params(self, params):
+    for i, param in enumerate(params):
+      self.params[i].set_value(param)

@@ -33,3 +33,8 @@ class ReconstructionModel(object):
   def get_params(self):
     #return [self.avgs, self.covs]
     return [self.avgs, self.cov_multiples]
+
+  def set_params(self, params):
+    avgs, cov_multiples = params
+    self.avgs.set_value(avgs)
+    self.cov_multiples.set_value(cov_multiples)
