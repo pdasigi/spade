@@ -47,7 +47,7 @@ class EventAE(object):
         p_w_c_sum += self.wc_pref_models[i].get_symb_score(x[i], y[j])
     p_c_c_sum = T.constant(0)
     for i in range(self.num_args):
-      p_c_c_sum += self.cc_pref_models[i].get_symb_score(y[0], y[i])
+      p_c_c_sum += self.cc_pref_models[i].get_symb_score(y[0], y[i + 1])
     return hsum + p_w_c_sum + p_c_c_sum
 
   def get_sym_encoder_partition(self, x, y_s):
