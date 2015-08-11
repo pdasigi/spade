@@ -76,11 +76,9 @@ class EventAE(object):
     posterior_partition = self.get_sym_posterior_partition(x, y_s)
     def prod_fun(y_0, interm_sum, x_0): 
       post_num = self.get_sym_posterior_num(x_0, y_0)
-      log_post_num = self.get_sym_encoder_energy(x_0, y_0) + T.log(self.get_sym_rec_prob(x_0, y_0))
-      return interm_sum + ifelse(T.le(post_num, 0), T.constant(0.0, dtype='float64'), post_num * log_post_num)
-    #prod_fun = lambda y_0, interm_sum, x_0: interm_sum + \
-    #    self.get_sym_posterior_num(x_0, y_0) * \
-    #    ( self.get_sym_encoder_energy(x_0, y_0) + T.log(self.get_sym_rec_prob(x_0, y_0)) )
+      fixed_post_num = ifelse(T.le(post_num, 1e-10), T.constant(0.0, dtype='float64'), post_num)
+      #log_post_num = self.get_sym_encoder_energy(x_0, y_0) + T.log(self.get_sym_rec_prob(x_0, y_0))
+      return interm_sum + ifelse(T.le(fixed_post_num, 1e-10), T.constant(0.0, dtype='float64'), fixed_post_num * T.log(fixed_post_num))
     partial_sums, _ = theano.scan(fn=prod_fun, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=x)
     complete_expectation = partial_sums[-1] / posterior_partition - T.log(encoder_partition)
     return complete_expectation
