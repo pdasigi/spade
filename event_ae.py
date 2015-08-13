@@ -80,7 +80,8 @@ class EventAE(object):
       #log_post_num = self.get_sym_encoder_energy(x_0, y_0) + T.log(self.get_sym_rec_prob(x_0, y_0))
       return interm_sum + ifelse(T.le(fixed_post_num, 1e-10), T.constant(0.0, dtype='float64'), fixed_post_num * T.log(fixed_post_num))
     partial_sums, _ = theano.scan(fn=prod_fun, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=x)
-    complete_expectation = partial_sums[-1] / posterior_partition - T.log(encoder_partition)
+    data_term = ifelse(T.eq(posterior_partition, T.constant(0.0, dtype='float64')), T.constant(0.0, dtype='float64'), partial_sums[-1] / posterior_partition)
+    complete_expectation = data_term - T.log(encoder_partition)
     return complete_expectation
 
   def get_train_func(self, learning_rate):
