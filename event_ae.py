@@ -76,12 +76,17 @@ class EventAE(object):
     posterior_partition = self.get_sym_posterior_partition(x, y_s)
     def prod_fun(y_0, interm_sum, x_0): 
       post_num = self.get_sym_posterior_num(x_0, y_0)
-      fixed_post_num = ifelse(T.le(post_num, 1e-10), T.constant(0.0, dtype='float64'), post_num)
+      fixed_post_num = ifelse(T.le(post_num, 1e-30), T.constant(0.0, dtype='float64'), post_num)
       #log_post_num = self.get_sym_encoder_energy(x_0, y_0) + T.log(self.get_sym_rec_prob(x_0, y_0))
-      return interm_sum + ifelse(T.le(fixed_post_num, 1e-10), T.constant(0.0, dtype='float64'), fixed_post_num * T.log(fixed_post_num))
+      return interm_sum + ifelse(T.le(fixed_post_num, 1e-30), T.constant(0.0, dtype='float64'), fixed_post_num * T.log(fixed_post_num))
+    #prod_fun = lambda y_0, interm_sum, x_0: interm_sum + \
+    #    self.get_sym_posterior_num(x_0, y_0) * \
+    #    ( self.get_sym_encoder_energy(x_0, y_0) + T.log(self.get_sym_rec_prob(x_0, y_0)) )
     partial_sums, _ = theano.scan(fn=prod_fun, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=x)
     data_term = ifelse(T.eq(posterior_partition, T.constant(0.0, dtype='float64')), T.constant(0.0, dtype='float64'), partial_sums[-1] / posterior_partition)
+    #data_term = partial_sums[-1]
     complete_expectation = data_term - T.log(encoder_partition)
+    #complete_expectation = data_term
     return complete_expectation
 
   def get_train_func(self, learning_rate):
@@ -90,7 +95,10 @@ class EventAE(object):
     em_cost = -self.get_sym_complete_expectation(x, y_s)
     params = self.repr_params + self.enc_params + self.rec_params
     g_params = T.grad(em_cost, params)
-    train_func = theano.function([x, y_s], em_cost, updates=[ (p, p - learning_rate * g) for p, g in zip(params, g_params) ])
+    # Updating the parameters only if the norm of the gradient is less than 100.
+    # Important: This check also takes care of any element in the gradients being nan. The conditional returns False even in that case.
+    updates=[ (p, ifelse(T.le(T.nlinalg.norm(g, None), T.constant(100.0, dtype='float64')), p - learning_rate * g, p)) for p, g in zip(params, g_params) ]
+    train_func = theano.function([x, y_s], em_cost, updates=updates)
     return train_func
 
   def get_posterior_func(self):
