@@ -116,7 +116,7 @@ for num_iter in range(max_iter):
   avg_cost = sum(costs)/len(costs)
   print >>sys.stderr, "Finished iteration %d.\n\tAverage train cost: %f\n\tTime %d sec\n\tIgnored %d points"%(num_iter + 1, avg_cost, endtime-starttime, ign_points)
   repr_param_out = open("repr_params_%d.pkl"%(num_iter + 1), "wb")
-  repr_params = [param.get_value() for param in event_ae.repr_param]
+  repr_params = [param.get_value() for param in event_ae.repr_params]
   cPickle.dump(repr_params, repr_param_out)
   repr_param_out.close()
   hyp_param_out = open("hyp_params_%d.pkl"%(num_iter + 1), "wb")
