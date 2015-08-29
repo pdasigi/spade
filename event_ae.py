@@ -1,5 +1,7 @@
 import theano, numpy
 from theano import tensor as T
+from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+#from theano.tensor.shared_randomstreams import RandomStreams
 from theano.ifelse import ifelse
 
 from hypernymy import HypernymModel
@@ -9,6 +11,8 @@ from reconstruction import ReconstructionModel
 class EventAE(object):
   def __init__(self, num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=50, concept_dim=50):
     numpy_rng = numpy.random.RandomState(12345)
+    self.theano_rng = RandomStreams(12345)
+    self.ont_size = ont_size
     vocab_rep_range = 4 * numpy.sqrt(6. / (vocab_size + word_dim))
     init_vocab_rep = numpy.asarray(numpy_rng.uniform(low = -vocab_rep_range, high = vocab_rep_range, size=(vocab_size, word_dim)) )
     ont_rep_range = 4 * numpy.sqrt(6. / (ont_size + concept_dim))
@@ -34,8 +38,18 @@ class EventAE(object):
       self.enc_params.extend(cc_pref_model.get_params())
     self.rec_model = ReconstructionModel(ont_size, vocab_rep)
     self.rec_params = self.rec_model.get_params()
+    # Random y, sampled from uniform(|ont|^num_slots)
+    self.y_r = T.cast(self.theano_rng.uniform(low=0, high=self.ont_size-1, size=(self.num_slots,)), 'int32')
+  
+  def get_sym_rand_y(self, y_s):
+    # NCE function
+    # Sample randomly from y|x
+    rand_ind = T.cast(self.theano_rng.uniform(low=0, high=y_s.shape[0]-1, size=(1,)), 'int32')
+    sample = y_s[rand_ind[0]]
+    return sample
     
   def get_sym_encoder_energy(self, x, y):
+    # Works with NCE
     hsum = T.constant(0)
     for i in range(self.num_slots):
       hsum += self.hyp_model.get_symb_score(x[i], y[i])
@@ -55,13 +69,28 @@ class EventAE(object):
     encoder_partition = partial_sums[-1]
     return encoder_partition
 
+  def get_sym_nc_encoder_prob(self, x, y, num_noise_samples=5):
+    # NCE function
+    # Noise distribution is not conditioned on x. So we sample directly from ont, not from y_s
+    enc_energy = self.get_sym_encoder_energy(x, y)
+    ns_prob = num_noise_samples * (1. / self.ont_size) ** self.num_slots
+    true_prob = enc_energy / (enc_energy + ns_prob)
+    noise_prob = T.constant(1.0, dtype='float64')
+    for _ in range(num_noise_samples):
+      #y_r = self.theano_rng.random_integers(low=0, high=self.ont_size-1, size=(self.num_slots,))
+      ns_enc_energy = self.get_sym_encoder_energy(x, self.y_r)
+      noise_prob *= ns_prob / (ns_enc_energy + ns_prob)
+    return true_prob * noise_prob
+
   def get_sym_rec_prob(self, x, y):
+    # Works with NCE
     init_prob = T.constant(1.0, dtype='float64')
     partial_prods, _ = theano.scan(fn = lambda x_i, y_i, interm_prod: interm_prod * self.rec_model.get_sym_rec_prob(x_i, y_i), outputs_info=init_prob, sequences=[x, y])
     rec_prob = partial_prods[-1]
     return rec_prob
     
   def get_sym_posterior_num(self, x, y):
+    # Needed for NCE
     enc_energy = self.get_sym_encoder_energy(x, y)
     rec_prob = self.get_sym_rec_prob(x, y)
     return T.exp(enc_energy) * rec_prob
@@ -70,6 +99,25 @@ class EventAE(object):
     partial_sums, _ = theano.scan(fn=lambda y, interm_sum, x_0: interm_sum + self.get_sym_posterior_num(x_0, y), outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=x)
     posterior_partition = partial_sums[-1]
     return posterior_partition
+
+  def get_sym_nc_posterior(self, x, y, num_noise_samples=5):
+    # NCE function
+    # p(\hat{x}, y | x)
+    return self.get_sym_nc_encoder_prob(x, y, num_noise_samples) * self.get_sym_rec_prob(x, y)
+
+  def get_sym_nc_label_prob(self, x, y, y_s, num_noise_samples=5):
+    # NCE function
+    # p(y | x, \hat{x})
+    true_posterior = self.get_sym_nc_posterior(x, y)
+    #TODO: Can make this more efficient
+    noise_posterior = self.get_sym_nc_posterior(x, self.get_sym_rand_y(y_s))
+    ns_prob = num_noise_samples * T.pow(1. / y_s.shape[0], self.num_slots)
+    true_prob = true_posterior / (true_posterior + ns_prob)
+    noise_prob = T.constant(1.0, dtype='float64')
+    for _ in range(num_noise_samples):
+      #noise_posterior = self.get_sym_nc_posterior(x, self.get_sym_rand_y(y_s))
+      noise_prob *= ns_prob / (noise_posterior + ns_prob)
+    return true_prob * noise_prob
 
   def get_sym_complete_expectation(self, x, y_s):
     encoder_partition = self.get_sym_encoder_partition(x, y_s)
@@ -88,11 +136,22 @@ class EventAE(object):
     complete_expectation = data_term - T.log(encoder_partition)
     #complete_expectation = data_term
     return complete_expectation
-
-  def get_train_func(self, learning_rate):
+  
+  def get_sym_nc_complete_expectation(self, x, y_s, num_noise_samples=5):
+    # NCE function
+    def get_expectation(y_0, interm_sum, x_0, Y):
+      label_prob = self.get_sym_nc_label_prob(x_0, y_0, Y)
+      posterior = self.get_sym_nc_posterior(x_0, y_0)
+      log_posterior = ifelse(T.le(posterior, 1e-30), T.constant(0.0, dtype='float64'), T.log(posterior))
+      return interm_sum + (label_prob * log_posterior)
+    res, _ = theano.scan(fn=get_expectation, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=[x, y_s])
+    complete_expectation = res[-1]
+    return complete_expectation
+    
+  def get_train_func(self, learning_rate, nce=True):
     # TODO: Implement AdaGrad
     x, y_s = T.ivector("x"), T.imatrix("y_s")
-    em_cost = -self.get_sym_complete_expectation(x, y_s)
+    em_cost = -self.get_sym_nc_complete_expectation(x, y_s) if nce else -self.get_sym_complete_expectation(x, y_s)
     params = self.repr_params + self.enc_params + self.rec_params
     g_params = T.grad(em_cost, params)
     # Updating the parameters only if the norm of the gradient is less than 100.
@@ -102,6 +161,7 @@ class EventAE(object):
     return train_func
 
   def get_posterior_func(self):
+    # Works with NCE
     x, y = T.ivectors('x', 'y')
     posterior_func = theano.function([x, y], self.get_sym_posterior_num(x, y))
     return posterior_func
