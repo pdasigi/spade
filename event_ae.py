@@ -8,6 +8,9 @@ from hypernymy import HypernymModel
 from preferences import PreferenceModel
 from reconstruction import ReconstructionModel 
 
+SMALL_NUM = 1e-30
+LOG_SMALL_NUM = numpy.log(SMALL_NUM)
+
 class EventAE(object):
   def __init__(self, num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=50, concept_dim=50):
     numpy_rng = numpy.random.RandomState(12345)
@@ -81,7 +84,6 @@ class EventAE(object):
     true_prob = enc_energy / (enc_energy + ns_prob)
     noise_prob = T.constant(1.0, dtype='float64')
     for _ in range(num_noise_samples):
-      #y_r = self.theano_rng.random_integers(low=0, high=self.ont_size-1, size=(self.num_slots,))
       ns_enc_energy = self.get_sym_encoder_energy(x, self.y_r)
       noise_prob *= ns_prob / (ns_enc_energy + ns_prob)
     return true_prob * noise_prob
@@ -132,12 +134,8 @@ class EventAE(object):
     posterior_partition = self.get_sym_posterior_partition(x, y_s)
     def prod_fun(y_0, interm_sum, x_0): 
       post_num = self.get_sym_posterior_num(x_0, y_0)
-      fixed_post_num = ifelse(T.le(post_num, 1e-30), T.constant(0.0, dtype='float64'), post_num)
-      #log_post_num = self.get_sym_encoder_energy(x_0, y_0) + T.log(self.get_sym_rec_prob(x_0, y_0))
-      return interm_sum + ifelse(T.le(fixed_post_num, 1e-30), T.constant(0.0, dtype='float64'), fixed_post_num * T.log(fixed_post_num))
-    #prod_fun = lambda y_0, interm_sum, x_0: interm_sum + \
-    #    self.get_sym_posterior_num(x_0, y_0) * \
-    #    ( self.get_sym_encoder_energy(x_0, y_0) + T.log(self.get_sym_rec_prob(x_0, y_0)) )
+      fixed_post_num = ifelse(T.le(post_num, SMALL_NUM), T.constant(0.0, dtype='float64'), post_num)
+      return interm_sum + ifelse(T.le(fixed_post_num, SMALL_NUM), T.constant(0.0, dtype='float64'), fixed_post_num * T.log(fixed_post_num))
     partial_sums, _ = theano.scan(fn=prod_fun, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=x)
     data_term = ifelse(T.eq(posterior_partition, T.constant(0.0, dtype='float64')), T.constant(0.0, dtype='float64'), partial_sums[-1] / posterior_partition)
     #data_term = partial_sums[-1]
@@ -150,7 +148,7 @@ class EventAE(object):
     def get_expectation(y_0, interm_sum, x_0, Y):
       label_prob = self.get_sym_nc_label_prob(x_0, y_0, Y)
       posterior = self.get_sym_nc_posterior(x_0, y_0)
-      log_posterior = ifelse(T.le(posterior, 1e-30), T.constant(0.0, dtype='float64'), T.log(posterior))
+      log_posterior = ifelse(T.le(posterior, SMALL_NUM), T.constant(LOG_SMALL_NUM, dtype='float64'), T.log(posterior))
       return interm_sum + (label_prob * log_posterior)
     res, _ = theano.scan(fn=get_expectation, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=[x, y_s])
     complete_expectation = res[-1]
