@@ -15,14 +15,17 @@ class ReconstructionModel(object):
     avg_range = 4 * numpy.sqrt(6. / (ont_size + word_dim))
     init_avgs = numpy.asarray(numpy_rng.uniform(low = -avg_range, high = avg_range, size = (ont_size, word_dim)))
     self.avgs = theano.shared(value = init_avgs, name = 'avgs')
-    init_cov_multiples = numpy.asarray(numpy_rng.uniform(size=ont_size))
+    init_cov_multiples = numpy.asarray([0.2]*ont_size)
     self.cov_multiples = theano.shared(value = init_cov_multiples, name = 'cov_mult')
     self.word_dim = word_dim
 
   def get_sym_rec_prob(self, word_ind, concept_ind):
     avg, cov_m = self.avgs[concept_ind], self.cov_multiples[concept_ind]
+    # TODO: Temporary change to fix covariance at 1.  Change this later
+    #cov_m = 0 * cov_m + 0.2
     word_rep = self.vocab_rep[word_ind]
-    exp_term = -0.5 * T.dot((word_rep - avg), (word_rep - avg)) * T.abs_(cov_m)
+    rep_m_avg = word_rep - avg
+    exp_term = -0.5 * T.dot(rep_m_avg, rep_m_avg) * (1. / T.abs_(cov_m))
     sqrt_term = T.pow(2 * T.abs_(cov_m) * numpy.pi, self.word_dim)
     self.p_r = 1. / T.sqrt(sqrt_term) * T.exp(exp_term)
     return self.p_r
