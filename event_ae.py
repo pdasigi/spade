@@ -79,12 +79,12 @@ class EventAE(object):
     # Noise distribution is not conditioned on x. So we sample directly from ont, not from y_s
     if num_noise_samples is None:
       num_noise_samples = self.num_enc_ns
-    enc_energy = self.get_sym_encoder_energy(x, y)
+    enc_energy = T.exp(self.get_sym_encoder_energy(x, y))
     ns_prob = num_noise_samples * (1. / self.ont_size) ** self.num_slots
     true_prob = enc_energy / (enc_energy + ns_prob)
     noise_prob = T.constant(1.0, dtype='float64')
     for _ in range(num_noise_samples):
-      ns_enc_energy = self.get_sym_encoder_energy(x, self.y_r)
+      ns_enc_energy = T.exp(self.get_sym_encoder_energy(x, self.y_r))
       noise_prob *= ns_prob / (ns_enc_energy + ns_prob)
     return true_prob * noise_prob
 
