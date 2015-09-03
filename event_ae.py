@@ -8,6 +8,9 @@ from hypernymy import HypernymModel
 from preferences import PreferenceModel
 from reconstruction import ReconstructionModel 
 
+SMALL_NUM = 1e-30
+LOG_SMALL_NUM = numpy.log(SMALL_NUM)
+
 class EventAE(object):
   def __init__(self, num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=50, concept_dim=50):
     numpy_rng = numpy.random.RandomState(12345)
@@ -40,6 +43,8 @@ class EventAE(object):
     self.rec_params = self.rec_model.get_params()
     # Random y, sampled from uniform(|ont|^num_slots)
     self.y_r = T.cast(self.theano_rng.uniform(low=0, high=self.ont_size-1, size=(self.num_slots,)), 'int32')
+    self.num_enc_ns = 1
+    self.num_label_ns = 1
   
   def get_sym_rand_y(self, y_s):
     # NCE function
@@ -69,16 +74,17 @@ class EventAE(object):
     encoder_partition = partial_sums[-1]
     return encoder_partition
 
-  def get_sym_nc_encoder_prob(self, x, y, num_noise_samples=5):
+  def get_sym_nc_encoder_prob(self, x, y, num_noise_samples=None):
     # NCE function
     # Noise distribution is not conditioned on x. So we sample directly from ont, not from y_s
-    enc_energy = self.get_sym_encoder_energy(x, y)
+    if num_noise_samples is None:
+      num_noise_samples = self.num_enc_ns
+    enc_energy = T.exp(self.get_sym_encoder_energy(x, y))
     ns_prob = num_noise_samples * (1. / self.ont_size) ** self.num_slots
     true_prob = enc_energy / (enc_energy + ns_prob)
     noise_prob = T.constant(1.0, dtype='float64')
     for _ in range(num_noise_samples):
-      #y_r = self.theano_rng.random_integers(low=0, high=self.ont_size-1, size=(self.num_slots,))
-      ns_enc_energy = self.get_sym_encoder_energy(x, self.y_r)
+      ns_enc_energy = T.exp(self.get_sym_encoder_energy(x, self.y_r))
       noise_prob *= ns_prob / (ns_enc_energy + ns_prob)
     return true_prob * noise_prob
 
@@ -100,17 +106,21 @@ class EventAE(object):
     posterior_partition = partial_sums[-1]
     return posterior_partition
 
-  def get_sym_nc_posterior(self, x, y, num_noise_samples=5):
+  def get_sym_nc_posterior(self, x, y, num_noise_samples=None):
     # NCE function
     # p(\hat{x}, y | x)
-    return self.get_sym_nc_encoder_prob(x, y, num_noise_samples) * self.get_sym_rec_prob(x, y)
+    if num_noise_samples is None:
+      num_noise_samples = self.num_enc_ns
+    return self.get_sym_nc_encoder_prob(x, y, num_noise_samples=self.num_enc_ns) * self.get_sym_rec_prob(x, y)
 
-  def get_sym_nc_label_prob(self, x, y, y_s, num_noise_samples=5):
+  def get_sym_nc_label_prob(self, x, y, y_s, num_noise_samples=None):
     # NCE function
     # p(y | x, \hat{x})
+    if num_noise_samples is None:
+      num_noise_samples = self.num_label_ns
     true_posterior = self.get_sym_nc_posterior(x, y)
     #TODO: Can make this more efficient
-    noise_posterior = self.get_sym_nc_posterior(x, self.get_sym_rand_y(y_s))
+    noise_posterior = self.get_sym_nc_posterior(x, self.get_sym_rand_y(y_s), num_noise_samples=1)
     ns_prob = num_noise_samples * T.pow(1. / y_s.shape[0], self.num_slots)
     true_prob = true_posterior / (true_posterior + ns_prob)
     noise_prob = T.constant(1.0, dtype='float64')
@@ -124,12 +134,8 @@ class EventAE(object):
     posterior_partition = self.get_sym_posterior_partition(x, y_s)
     def prod_fun(y_0, interm_sum, x_0): 
       post_num = self.get_sym_posterior_num(x_0, y_0)
-      fixed_post_num = ifelse(T.le(post_num, 1e-30), T.constant(0.0, dtype='float64'), post_num)
-      #log_post_num = self.get_sym_encoder_energy(x_0, y_0) + T.log(self.get_sym_rec_prob(x_0, y_0))
-      return interm_sum + ifelse(T.le(fixed_post_num, 1e-30), T.constant(0.0, dtype='float64'), fixed_post_num * T.log(fixed_post_num))
-    #prod_fun = lambda y_0, interm_sum, x_0: interm_sum + \
-    #    self.get_sym_posterior_num(x_0, y_0) * \
-    #    ( self.get_sym_encoder_energy(x_0, y_0) + T.log(self.get_sym_rec_prob(x_0, y_0)) )
+      fixed_post_num = ifelse(T.le(post_num, SMALL_NUM), T.constant(0.0, dtype='float64'), post_num)
+      return interm_sum + ifelse(T.le(fixed_post_num, SMALL_NUM), T.constant(0.0, dtype='float64'), fixed_post_num * T.log(fixed_post_num))
     partial_sums, _ = theano.scan(fn=prod_fun, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=x)
     data_term = ifelse(T.eq(posterior_partition, T.constant(0.0, dtype='float64')), T.constant(0.0, dtype='float64'), partial_sums[-1] / posterior_partition)
     #data_term = partial_sums[-1]
@@ -137,12 +143,12 @@ class EventAE(object):
     #complete_expectation = data_term
     return complete_expectation
   
-  def get_sym_nc_complete_expectation(self, x, y_s, num_noise_samples=5):
+  def get_sym_nc_complete_expectation(self, x, y_s):
     # NCE function
     def get_expectation(y_0, interm_sum, x_0, Y):
       label_prob = self.get_sym_nc_label_prob(x_0, y_0, Y)
       posterior = self.get_sym_nc_posterior(x_0, y_0)
-      log_posterior = ifelse(T.le(posterior, 1e-30), T.constant(0.0, dtype='float64'), T.log(posterior))
+      log_posterior = ifelse(T.le(posterior, SMALL_NUM), T.constant(LOG_SMALL_NUM, dtype='float64'), T.log(posterior))
       return interm_sum + (label_prob * log_posterior)
     res, _ = theano.scan(fn=get_expectation, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=[x, y_s])
     complete_expectation = res[-1]
@@ -165,4 +171,12 @@ class EventAE(object):
     x, y = T.ivectors('x', 'y')
     posterior_func = theano.function([x, y], self.get_sym_posterior_num(x, y))
     return posterior_func
+
+  def set_repr_params(self, repr_param_vals):
+    for i, param_val in enumerate(repr_param_vals):
+      self.repr_params[i].set_value(param_val)
+
+  def set_rec_params(self, rec_param_vals):
+    for i, param_val in enumerate(rec_param_vals):
+      self.rec_params[i].set_value(param_val)
 
