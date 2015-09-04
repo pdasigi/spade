@@ -11,6 +11,7 @@ from theano import tensor as T
 from event_ae import EventAE
 from process_data import DataProcessor 
 
+sys.setrecursionlimit(10000)
 num_args = 2
 num_slots = num_args + 1
 hyp_hidden_size = 50
@@ -99,13 +100,23 @@ def get_mle_y(x_datum, y_s_datum):
 x = T.ivector('x') # Vector of word indexes in vocabulary
 y_s = T.imatrix('y_s') # Matrix with all possible concept combinations
 
-def train_on_data(part_train_func, train_data_part, costs):
-  for (x_datum, y_s_datum) in train_data_part:
+def train_on_data(part_train_func, train_data_part, proc_ind, costs=None):
+  pool_costs = False
+  if costs is None:
+    costs = []
+    pool_costs = True
+  for dt_ind, (x_datum, y_s_datum) in enumerate(train_data_part):
     cost = part_train_func(numpy.asarray(x_datum, dtype='int32'), numpy.asarray(y_s_datum, dtype='int32'))
-    costs.put(cost)
+    if pool_costs:
+      costs.append(cost)
+    else:
+      costs.put(cost)
+    if dt_ind % 10 == 0:
+      print "Process %d trained on %d points"%(proc_ind, dt_ind)
+  if pool_costs:
+    return costs
 
 for num_iter in range(max_iter):
-  costs = mp.Queue()
   times = []
   random.shuffle(train_data)
   train_data_parts = []
@@ -113,19 +124,24 @@ for num_iter in range(max_iter):
   for chunk_start_ind in range(0, len(train_data), chunk_size):
     train_data_parts.append(train_data[chunk_start_ind : chunk_start_ind + chunk_size])
   print >>sys.stderr, "Starting %d processes each with %d points to train"%(num_procs, chunk_size)
-  starttime = time.time()
-  processes = [mp.Process(target=train_on_data, args=(part_train_funcs[i], train_data_parts[i], costs)) for i in range(num_procs)]
-  for p in processes:
-    p.start()
-  for p in processes:
-    p.join()
-  endtime = time.time()
   costs_list = []
-  while not costs.empty():
-    costs_list.append(costs.get())
+  starttime = time.time()
+  #costs = mp.Queue()
+  #processes = [mp.Process(target=train_on_data, args=(part_train_funcs[i], train_data_parts[i], i, costs)) for i in range(num_procs)]
+  #for p in processes:
+  #  p.start()
+  #for p in processes:
+  #  p.join()
+  #while not costs.empty():
+  #  costs_list.append(costs.get())
+  pool = mp.Pool(processes=num_procs)
+  results = [pool.apply_async(train_on_data, args=(part_train_funcs[i], train_data_parts[i], i)) for i in range(num_procs)]
+  for r in results:
+    costs_list.extend(r.get())
+  endtime = time.time()
   zero_costs = sum([1 if c == 0.0 else 0 for c in costs_list])
   avg_cost = sum(costs_list)/len(costs_list)
-  print >>sys.stderr, "Finished iteration %d.\n\tAverage train cost: %f\n\tTime %d sec\n\tZero costs: %d"%(num_iter + 1, avg_cost, endtime-starttime, zero_costs)
+  print >>sys.stderr, "Finished iteration %d.\n\tAverage train cost: %r\n\tTime %d sec\n\tZero costs: %d"%(num_iter + 1, avg_cost, endtime-starttime, zero_costs)
   
   print >>sys.stderr, "Synchronizing param"
   synchronize_param()

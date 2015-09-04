@@ -21,8 +21,6 @@ class ReconstructionModel(object):
 
   def get_sym_rec_prob(self, word_ind, concept_ind):
     avg, cov_m = self.avgs[concept_ind], self.cov_multiples[concept_ind]
-    # TODO: Temporary change to fix covariance at 1.  Change this later
-    #cov_m = 0 * cov_m + 0.2
     word_rep = self.vocab_rep[word_ind]
     rep_m_avg = word_rep - avg
     exp_term = -0.5 * T.dot(rep_m_avg, rep_m_avg) * (1. / T.abs_(cov_m))

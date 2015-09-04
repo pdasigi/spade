@@ -74,17 +74,18 @@ class EventAE(object):
     encoder_partition = partial_sums[-1]
     return encoder_partition
 
-  def get_sym_nc_encoder_prob(self, x, y, num_noise_samples=None):
+  def get_sym_nc_encoder_prob(self, x, y, y_s, num_noise_samples=None):
     # NCE function
     # Noise distribution is not conditioned on x. So we sample directly from ont, not from y_s
     if num_noise_samples is None:
       num_noise_samples = self.num_enc_ns
     enc_energy = T.exp(self.get_sym_encoder_energy(x, y))
-    ns_prob = num_noise_samples * (1. / self.ont_size) ** self.num_slots
+    ns_prob = num_noise_samples * ((1. / self.ont_size) ** self.num_slots)
     true_prob = enc_energy / (enc_energy + ns_prob)
     noise_prob = T.constant(1.0, dtype='float64')
     for _ in range(num_noise_samples):
-      ns_enc_energy = T.exp(self.get_sym_encoder_energy(x, self.y_r))
+      ns_enc_energy = self.get_sym_encoder_energy(x, self.y_r)
+      #ns_enc_energy = T.exp(self.get_sym_encoder_energy(x, self.get_sym_rand_y(y_s)))
       noise_prob *= ns_prob / (ns_enc_energy + ns_prob)
     return true_prob * noise_prob
 
@@ -106,12 +107,12 @@ class EventAE(object):
     posterior_partition = partial_sums[-1]
     return posterior_partition
 
-  def get_sym_nc_posterior(self, x, y, num_noise_samples=None):
+  def get_sym_nc_posterior(self, x, y, y_s, num_noise_samples=None):
     # NCE function
     # p(\hat{x}, y | x)
     if num_noise_samples is None:
       num_noise_samples = self.num_enc_ns
-    return self.get_sym_nc_encoder_prob(x, y, num_noise_samples=self.num_enc_ns) * self.get_sym_rec_prob(x, y)
+    return self.get_sym_nc_encoder_prob(x, y, y_s, num_noise_samples=num_noise_samples) * self.get_sym_rec_prob(x, y)
 
   def get_sym_nc_label_prob(self, x, y, y_s, num_noise_samples=None):
     # NCE function
@@ -153,17 +154,27 @@ class EventAE(object):
     res, _ = theano.scan(fn=get_expectation, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=[x, y_s])
     complete_expectation = res[-1]
     return complete_expectation
+  
+  def get_sym_nc_direct_prob(self, x, y_s):
+    # NCE function
+    def get_prob(y_0, interm_sum, x_0, Y):
+      posterior = self.get_sym_nc_posterior(x_0, y_0, Y)
+      return interm_sum + posterior
+    res, _ = theano.scan(fn=get_prob, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=[x, y_s])
+    direct_prob = res[-1]
+    return direct_prob
     
   def get_train_func(self, learning_rate, nce=True):
     # TODO: Implement AdaGrad
     x, y_s = T.ivector("x"), T.imatrix("y_s")
-    em_cost = -self.get_sym_nc_complete_expectation(x, y_s) if nce else -self.get_sym_complete_expectation(x, y_s)
+    #em_cost = -self.get_sym_nc_complete_expectation(x, y_s) if nce else -self.get_sym_complete_expectation(x, y_s)
+    cost = -self.get_sym_nc_direct_prob(x, y_s)
     params = self.repr_params + self.enc_params + self.rec_params
-    g_params = T.grad(em_cost, params)
+    g_params = T.grad(cost, params)
     # Updating the parameters only if the norm of the gradient is less than 100.
     # Important: This check also takes care of any element in the gradients being nan. The conditional returns False even in that case.
     updates=[ (p, ifelse(T.le(T.nlinalg.norm(g, None), T.constant(100.0, dtype='float64')), p - learning_rate * g, p)) for p, g in zip(params, g_params) ]
-    train_func = theano.function([x, y_s], em_cost, updates=updates)
+    train_func = theano.function([x, y_s], cost, updates=updates)
     return train_func
 
   def get_posterior_func(self):
