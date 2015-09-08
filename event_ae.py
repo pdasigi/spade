@@ -76,7 +76,6 @@ class EventAE(object):
 
   def get_sym_nc_encoder_prob(self, x, y, y_s, num_noise_samples=None):
     # NCE function
-    # Noise distribution is not conditioned on x. So we sample directly from ont, not from y_s
     if num_noise_samples is None:
       num_noise_samples = self.num_enc_ns
     enc_energy = T.exp(self.get_sym_encoder_energy(x, y))
@@ -84,7 +83,8 @@ class EventAE(object):
     true_prob = enc_energy / (enc_energy + ns_prob)
     noise_prob = T.constant(1.0, dtype='float64')
     for _ in range(num_noise_samples):
-      ns_enc_energy = self.get_sym_encoder_energy(x, self.y_r)
+      # Noise distribution is not conditioned on x. So we sample directly from ont, not from y_s
+      ns_enc_energy = T.exp(self.get_sym_encoder_energy(x, self.y_r))
       #ns_enc_energy = T.exp(self.get_sym_encoder_energy(x, self.get_sym_rand_y(y_s)))
       noise_prob *= ns_prob / (ns_enc_energy + ns_prob)
     return true_prob * noise_prob
@@ -168,7 +168,7 @@ class EventAE(object):
     # TODO: Implement AdaGrad
     x, y_s = T.ivector("x"), T.imatrix("y_s")
     #em_cost = -self.get_sym_nc_complete_expectation(x, y_s) if nce else -self.get_sym_complete_expectation(x, y_s)
-    cost = -self.get_sym_nc_direct_prob(x, y_s)
+    cost = -T.log(self.get_sym_nc_direct_prob(x, y_s))
     params = self.repr_params + self.enc_params + self.rec_params
     g_params = T.grad(cost, params)
     # Updating the parameters only if the norm of the gradient is less than 100.
