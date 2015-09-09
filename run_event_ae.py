@@ -73,7 +73,7 @@ for num_iter in range(max_iter):
     costs.append(cost)
     if i % 100 == 0:
       print >>sys.stderr, "Processed %d points.  Average cost till now is %r"%(i, sum(costs)/len(costs))
-      print >>sys.stderr, "\tAverage time per point till now is %d"%(sum(times)/len(times))
+      print >>sys.stderr, "\tAverage time per point till now is %f sec"%(float(sum(times))/len(times))
   epoch_endtime = time.time()
   avg_cost = sum(costs)/len(costs)
   print >>sys.stderr, "Finished iteration %d.\n\tAverage train cost: %f\n\tTime %d sec"%(num_iter + 1, avg_cost, epoch_endtime-epoch_starttime)

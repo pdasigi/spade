@@ -107,6 +107,9 @@ class EventAE(object):
     posterior_partition = partial_sums[-1]
     return posterior_partition
 
+  def get_sym_posterior(self, x, y, y_s):
+    return self.get_sym_posterior_num(x, y) / self.get_sym_posterior_partition(x, y_s)
+
   def get_sym_nc_posterior(self, x, y, y_s, num_noise_samples=None):
     # NCE function
     # p(\hat{x}, y | x)
@@ -160,15 +163,26 @@ class EventAE(object):
     def get_prob(y_0, interm_sum, x_0, Y):
       posterior = self.get_sym_nc_posterior(x_0, y_0, Y)
       return interm_sum + posterior
-    res, _ = theano.scan(fn=get_prob, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=[x, y_s])
+    res, _ = theano.scan(fn=get_prob, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=[x, y_s], n_steps = 10)
     direct_prob = res[-1]
     return direct_prob
     
-  def get_train_func(self, learning_rate, nce=True):
+  def get_sym_direct_prob(self, x, y_s):
+    def get_prob(y_0, interm_sum, x_0, Y):
+      posterior = self.get_sym_posterior(x_0, y_0, Y)
+      return interm_sum + posterior
+    res, _ = theano.scan(fn=get_prob, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=[x, y_s])
+    direct_prob = res[-1]
+    return direct_prob
+  
+
+  def get_train_func(self, learning_rate, nce=False, em=False):
     # TODO: Implement AdaGrad
     x, y_s = T.ivector("x"), T.imatrix("y_s")
-    #em_cost = -self.get_sym_nc_complete_expectation(x, y_s) if nce else -self.get_sym_complete_expectation(x, y_s)
-    cost = -T.log(self.get_sym_nc_direct_prob(x, y_s))
+    if em:
+      cost = -self.get_sym_nc_complete_expectation(x, y_s) if nce else -self.get_sym_complete_expectation(x, y_s)
+    else:
+      cost = -T.log(self.get_sym_nc_direct_prob(x, y_s)) if nce else -T.log(self.get_sym_direct_prob(x, y_s))
     params = self.repr_params + self.enc_params + self.rec_params
     g_params = T.grad(cost, params)
     # Updating the parameters only if the norm of the gradient is less than 100.
