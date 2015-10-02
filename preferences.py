@@ -15,7 +15,7 @@ class PreferenceModel(object):
         raise RuntimeError, "vocab_rep has to be given when pref_type is word_concept"
     else:
       self.pref_type = 'concept_concept'
-    impl_models = ['linlayer']
+    impl_models = ['linlayer', 'tanhlayer']
     if modelname not in impl_models:
       raise NotImplementedError, "Model name %s not known"%(modelname)
     numpy_rng = numpy.random.RandomState(12345)
@@ -31,12 +31,12 @@ class PreferenceModel(object):
       ent1_dim = concept_dim
       ent2_dim = concept_dim
 
-    if self.modelname == 'linlayer':
+    if self.modelname == 'linlayer' or self.modelname == 'tanhlayer':
       proj_weight_dim = ent1_dim + ent2_dim
-      proj_weight_range = 4 * numpy.sqrt(6. / (proj_weight_dim + hidden_size))
+      proj_weight_range = numpy.sqrt(6. / (proj_weight_dim + hidden_size))
       init_proj_weight = numpy.asarray(numpy_rng.uniform(low = -proj_weight_range, high = proj_weight_range, size = (proj_weight_dim, hidden_size)))
       self.proj_weight = theano.shared(value=init_proj_weight, name='P_p')
-      score_weight_range = 4 * numpy.sqrt(6. / hidden_size)
+      score_weight_range = numpy.sqrt(6. / hidden_size)
       init_score_weight = numpy.asarray(numpy_rng.uniform(low = -score_weight_range, high = score_weight_range, size = hidden_size))
       self.score_weight = theano.shared(value=init_score_weight, name='p_s')
       self.params = [self.proj_weight, self.score_weight]
@@ -47,7 +47,10 @@ class PreferenceModel(object):
     else:
       ent1_vec = self.ont_rep[ent1_ind]
     ent2_vec = self.ont_rep[ent2_ind]
-    pref_score = T.dot( self.score_weight, T.dot(self.proj_weight.T, T.concatenate([ent1_vec, ent2_vec])))
+    if self.modelname == 'linlayer':
+      pref_score = T.dot( self.score_weight, T.dot(self.proj_weight.T, T.concatenate([ent1_vec, ent2_vec])))
+    elif self.modelname == 'tanhlayer':
+      pref_score = T.dot( self.score_weight, T.tanh(T.dot(self.proj_weight.T, T.concatenate([ent1_vec, ent2_vec])))) 
     return pref_score
 
   def get_params(self):
