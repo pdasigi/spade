@@ -1,3 +1,4 @@
+import sys
 import codecs, re
 import itertools
 from nltk.corpus import wordnet as wn
@@ -84,7 +85,8 @@ class DataProcessor(object):
         elif word[0].isupper():
           hypernyms = list(self.misc_hypernyms)
         if len(hypernyms) == 0:
-          continue
+          #continue
+          hypernyms = [word]
         slot_hypernyms.append((word, hypernyms))
         labeled_args[label] = word
         #print label, word, hypernyms
@@ -126,16 +128,3 @@ class DataProcessor(object):
     #print float(sum(arg_hypernym_lens))/len(arg_hypernym_lens)
     return x_data, y_s_data, word_index, concept_index, word_hypernym_map
 
-#import sys
-#dp = DataProcessor()
-#x_data, y_s_data, w_ind, c_ind, w_h_map = dp.make_data(sys.argv[1])
-#print "X data:"
-#print x_data
-#print "\nY_s data sizes:"
-#print [len(y_d) for y_d in y_s_data]
-#print "\nw_ind:"
-#print w_ind
-#print "\nc_ind:"
-#print c_ind
-#print "\nw_h_map:"
-#print w_h_map
