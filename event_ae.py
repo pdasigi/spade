@@ -176,7 +176,7 @@ class EventAE(object):
     return direct_prob
   
 
-  def get_train_func(self, learning_rate, nce=False, em=False):
+  def get_train_func(self, learning_rate, nce=True, em=False):
     # TODO: Implement AdaGrad
     x, y_s = T.ivector("x"), T.imatrix("y_s")
     if em:
