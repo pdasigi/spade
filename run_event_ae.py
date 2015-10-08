@@ -33,7 +33,7 @@ ont_file.close()
 rev_w_ind = {ind:word for word, ind in w_ind.items()}
 rev_c_ind = {ind:concept for concept, ind in c_ind.items()}
 train_data = zip(x_data, y_s_data)
-sanity_test_data = random.sample(train_data, len(train_data)/10)
+sanity_test_data = random.sample(train_data, min(len(train_data)/10, 20))
 
 num_cands = sum([len(y_s_d) for _, y_s_d in train_data])
 print >>sys.stderr, "Read training data. Average number of concept candidates per point: %f"%(float(num_cands)/len(train_data))
