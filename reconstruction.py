@@ -6,10 +6,10 @@ from theano import tensor as T
 class ReconstructionModel(object):
   def __init__(self, ont_rep, vocab_rep):
     """
-    ont_size (int):  Number of concepts in the ontology
-    word_dim (int):  Dimensionality of word representations
+    ont_rep:  Ontology rep theano shared variable
+    vocab_rep:  Vocabulary rep theano shared variable
     """
-    numpy_rng = numpy.random.RandomState(12345)
+    #numpy_rng = numpy.random.RandomState(12345)
     _, word_dim = vocab_rep.get_value().shape
     self.vocab_rep = vocab_rep
     ont_size, _ = ont_rep.get_value().shape

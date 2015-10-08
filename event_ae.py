@@ -39,7 +39,7 @@ class EventAE(object):
       cc_pref_model = PreferenceModel('concept_concept', 'linlayer', cc_hidden_sizes[i], ont_rep)
       self.cc_pref_models.append(cc_pref_model)
       self.enc_params.extend(cc_pref_model.get_params())
-    self.rec_model = ReconstructionModel(ont_size, vocab_rep)
+    self.rec_model = ReconstructionModel(ont_rep, vocab_rep)
     self.rec_params = self.rec_model.get_params()
     # Random y, sampled from uniform(|ont|^num_slots)
     self.y_r = T.cast(self.theano_rng.uniform(low=0, high=self.ont_size-1, size=(self.num_slots,)), 'int32')
@@ -163,7 +163,7 @@ class EventAE(object):
     def get_prob(y_0, interm_sum, x_0, Y):
       posterior = self.get_sym_nc_posterior(x_0, y_0, Y)
       return interm_sum + posterior
-    res, _ = theano.scan(fn=get_prob, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=[x, y_s], n_steps = 10)
+    res, _ = theano.scan(fn=get_prob, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=[x, y_s])
     direct_prob = res[-1]
     return direct_prob
     
