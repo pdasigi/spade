@@ -8,10 +8,17 @@ class DataProcessor(object):
     # pred_arg_pos (list): List of strings that work as pos tags for predicate and arguments.
     # Examples: nsubj-dobj: ['v', 'n', 'n'], nn: ['n', 'n'], amod: ['n', 'a']
     self.pred_arg_pos = pred_arg_pos
-    self.word_syn_cutoff = 2
-    self.syn_path_cutoff = 5
-    self.thing_syn_cutoff = 4
-    self.thing_prons = ['which', 'that', 'this', 'what', 'these', 'itself', 'something', 'anything', 'everything'] # thing
+    if len(pred_arg_pos) == 2:
+        self.word_syn_cutoff = -1
+        self.syn_path_cutoff = -1
+        self.thing_syn_cutoff = -1
+    else:
+        # Recommendations for verb-subj-obj
+        self.word_syn_cutoff = 2
+        self.syn_path_cutoff = 5
+        self.thing_syn_cutoff = 4
+
+    self.thing_prons = ['it', 'which', 'that', 'this', 'what', 'these', 'itself', 'something', 'anything', 'everything'] # thing
     self.male_prons = ['he', 'him', 'himself', 'his'] # man.n.01
     self.female_prons = ['she', 'her', 'herself'] # woman.m.01
     self.people_prons = ['they', 'them', 'themselves', 'we', 'ourselves', 'yourselves'] # people.n.01, people.n.03
