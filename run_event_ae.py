@@ -8,16 +8,17 @@ from theano import tensor as T
 from event_ae import EventAE
 from process_data import DataProcessor 
 
-num_args = 2
-num_slots = num_args + 1
+pred_arg_pos = sys.argv[2].split("_")
+dp = DataProcessor(pred_arg_pos)
+x_data, y_s_data, w_ind, c_ind, w_h_map = dp.make_data(sys.argv[1])
+
+num_slots = len(x_data[0])
+num_args = num_slots - 1
 hyp_hidden_size = 20
 learning_rate = 0.01
 wc_hidden_sizes = [20] * num_slots
 cc_hidden_sizes = [20] * num_args
 max_iter = 10
-
-dp = DataProcessor()
-x_data, y_s_data, w_ind, c_ind, w_h_map = dp.make_data(sys.argv[1])
 
 vocab_file = codecs.open("vocab.txt", "w", "utf-8")
 for w, ind in w_ind.items():
