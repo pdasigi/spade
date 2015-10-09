@@ -8,7 +8,7 @@ class HypernymModel(object):
     vocab_rep (theano.shared):  Shared vocabulary representation
     ont_rep (theano.shared):  Shared ontology representation
     """
-    impl_models = ['linlayer', 'tanhlayer', 'dotproduct']
+    impl_models = ['linlayer', 'tanhlayer', 'dotproduct', 'weighted_prod']
     if modelname not in impl_models:
       raise NotImplementedError, "Model name %s not known"%(modelname)
     numpy_rng = numpy.random.RandomState(12345)
@@ -27,6 +27,10 @@ class HypernymModel(object):
       init_score_weight = numpy.asarray(numpy_rng.uniform(low = -score_weight_range, high = score_weight_range, size = hidden_size))
       self.score_weight = theano.shared(value=init_score_weight, name='h_s')
       self.params = [self.proj_weight, self.score_weight]
+    elif self.modelname == 'weighted_prod':
+      init_prod_weight = numpy.asarray(numpy_rng.uniform(low = -1.0, high = 1.0, size = (word_dim, concept_dim)))
+      self.prod_weight = theano.shared(value = init_prod_weight, name = 'H_w')
+      self.params = [self.prod_weight]
 
   def get_symb_score(self, word_ind, concept_ind):
     word_vec = self.vocab_rep[word_ind]
@@ -39,6 +43,9 @@ class HypernymModel(object):
       return self.score
     elif self.modelname == "dotproduct":
       self.score = T.dot(word_vec, concept_vec)
+      return self.score
+    elif self.modelname == 'weighted_prod':
+      self.score = T.dot(T.dot(word_vec, self.prod_weight), concept_vec)
       return self.score
     else:
       raise NotImplementedError
