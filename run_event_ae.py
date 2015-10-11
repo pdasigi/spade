@@ -2,13 +2,20 @@ import sys
 import time
 import random
 import cPickle
+import gzip
 import codecs
 import theano, numpy
 from theano import tensor as T
 from event_ae import EventAE
 from process_data import DataProcessor 
 
+word_rep_param = False
 pred_arg_pos = sys.argv[2].split("_")
+use_pretrained_wordrep = False 
+if len(sys.argv) == 4:
+  use_pretrained_wordrep = True
+  pt_word_rep = {l.split()[0]: numpy.asarray([float(f) for f in l.strip().split()[1:]]) for l in gzip.open(sys.argv[3])}
+
 dp = DataProcessor(pred_arg_pos)
 x_data, y_s_data, w_ind, c_ind, w_h_map = dp.make_data(sys.argv[1])
 
@@ -42,9 +49,19 @@ vocab_size = len(w_ind)
 ont_size = len(c_ind)
 
 comp_starttime = time.time()
-event_ae = EventAE(num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes)
+event_ae = EventAE(num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_rep_param=word_rep_param)
 train_func = event_ae.get_train_func(learning_rate)
 post_score_func = event_ae.get_posterior_func()
+
+if use_pretrained_wordrep:
+  num_words_covered = 0
+  init_wordrep = event_ae.vocab_rep.get_value()
+  for word in w_ind:
+    if word in pt_word_rep:
+      init_wordrep[w_ind[word]] = pt_word_rep[word]
+      num_words_covered += 1
+  print >>sys.stderr, "Using pretrained word representations from %s"%(sys.argv[3])
+  print >>sys.stderr, "\tcoverage is %f"%(float(num_words_covered)/len(w_ind))
 
 def get_mle_y(x_datum, y_s_datum):
   max_score = -float("inf")

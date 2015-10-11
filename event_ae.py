@@ -12,7 +12,7 @@ SMALL_NUM = 1e-30
 LOG_SMALL_NUM = numpy.log(SMALL_NUM)
 
 class EventAE(object):
-  def __init__(self, num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=50, concept_dim=50):
+  def __init__(self, num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=50, concept_dim=50, word_rep_param=True):
     numpy_rng = numpy.random.RandomState(12345)
     self.theano_rng = RandomStreams(12345)
     self.ont_size = ont_size
@@ -20,26 +20,27 @@ class EventAE(object):
     init_vocab_rep = numpy.asarray(numpy_rng.uniform(low = -vocab_rep_range, high = vocab_rep_range, size=(vocab_size, word_dim)) )
     ont_rep_range = 4 * numpy.sqrt(6. / (ont_size + concept_dim))
     init_ont_rep = numpy.asarray(numpy_rng.uniform(low = -ont_rep_range, high = ont_rep_range, size=(ont_size, concept_dim)) )
-    vocab_rep = theano.shared(value=init_vocab_rep, name='vocab_rep')
+    self.vocab_rep = theano.shared(value=init_vocab_rep, name='vocab_rep')
     ont_rep = theano.shared(value=init_ont_rep, name='ont_rep')
-    self.repr_params = [vocab_rep, ont_rep]
+    self.repr_params = [self.vocab_rep] if word_rep_param else []
+    self.repr_params.append(ont_rep)
     self.enc_params = []
-    self.hyp_model = HypernymModel('linlayer', hyp_hidden_size, vocab_rep, ont_rep)
+    self.hyp_model = HypernymModel('weighted_prod', hyp_hidden_size, self.vocab_rep, ont_rep)
     self.enc_params.extend(self.hyp_model.get_params())
     self.wc_pref_models = []
     self.cc_pref_models = []
     self.num_slots = num_args + 1 # +1 for the predicate
     self.num_args = num_args
     for i in range(self.num_slots):
-      wc_pref_model = PreferenceModel('word_concept', 'linlayer', wc_hidden_sizes[i], ont_rep, vocab_rep)
+      wc_pref_model = PreferenceModel('word_concept', 'tanhlayer', wc_hidden_sizes[i], ont_rep, self.vocab_rep)
       self.wc_pref_models.append(wc_pref_model)
       self.enc_params.extend(wc_pref_model.get_params())
   
     for i in range(num_args):
-      cc_pref_model = PreferenceModel('concept_concept', 'linlayer', cc_hidden_sizes[i], ont_rep)
+      cc_pref_model = PreferenceModel('concept_concept', 'tanhlayer', cc_hidden_sizes[i], ont_rep)
       self.cc_pref_models.append(cc_pref_model)
       self.enc_params.extend(cc_pref_model.get_params())
-    self.rec_model = ReconstructionModel(ont_rep, vocab_rep)
+    self.rec_model = ReconstructionModel(ont_rep, self.vocab_rep)
     self.rec_params = self.rec_model.get_params()
     # Random y, sampled from uniform(|ont|^num_slots)
     self.y_r = T.cast(self.theano_rng.uniform(low=0, high=self.ont_size-1, size=(self.num_slots,)), 'int32')
