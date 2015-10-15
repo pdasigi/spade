@@ -104,10 +104,11 @@ class EventAE(object):
     return T.exp(enc_energy) * rec_prob
       
   def get_sym_posterior_partition(self, x, y_s):
-    partial_sums, _ = theano.scan(fn=lambda y, interm_sum, x_0: interm_sum + self.get_sym_posterior_num(x_0, y), outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=x)
+    partial_sums, _ = theano.scan(fn=lambda y, interm_sum, x_0: interm_sum + T.exp(self.get_sym_encoder_energy(x_0, y)), outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=x)
     posterior_partition = partial_sums[-1]
     return posterior_partition
 
+  # Following function is useless.
   def get_sym_posterior(self, x, y, y_s):
     return self.get_sym_posterior_num(x, y) / self.get_sym_posterior_partition(x, y_s)
 
@@ -169,11 +170,11 @@ class EventAE(object):
     return direct_prob
     
   def get_sym_direct_prob(self, x, y_s):
-    def get_prob(y_0, interm_sum, x_0, Y):
-      posterior = self.get_sym_posterior(x_0, y_0, Y)
-      return interm_sum + posterior
-    res, _ = theano.scan(fn=get_prob, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=[x, y_s])
-    direct_prob = res[-1]
+    def get_post_num_sum(y_0, interm_sum, x_0):
+      posterior_num = self.get_sym_posterior_num(x_0, y_0)
+      return interm_sum + posterior_num
+    res, _ = theano.scan(fn=get_post_num_sum, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=[x])
+    direct_prob = res[-1] / self.get_sym_posterior_partition(x, y_s)
     return direct_prob
   
 
