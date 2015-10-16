@@ -104,7 +104,7 @@ class EventAE(object):
     return T.exp(enc_energy) * rec_prob
       
   def get_sym_posterior_partition(self, x, y_s):
-    partial_sums, _ = theano.scan(fn=lambda y, interm_sum, x_0: interm_sum + T.exp(self.get_sym_encoder_energy(x_0, y)), outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=x)
+    partial_sums, _ = theano.scan(fn=lambda y, interm_sum, x_0: interm_sum + self.get_sym_posterior_num(x_0, y), outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=x)
     posterior_partition = partial_sums[-1]
     return posterior_partition
 
@@ -174,7 +174,7 @@ class EventAE(object):
       posterior_num = self.get_sym_posterior_num(x_0, y_0)
       return interm_sum + posterior_num
     res, _ = theano.scan(fn=get_post_num_sum, outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=[x])
-    direct_prob = res[-1] / self.get_sym_posterior_partition(x, y_s)
+    direct_prob = res[-1] / self.get_sym_encoder_partition(x, y_s)
     return direct_prob
   
 
@@ -198,6 +198,12 @@ class EventAE(object):
     x, y = T.ivectors('x', 'y')
     posterior_func = theano.function([x, y], self.get_sym_posterior_num(x, y))
     return posterior_func
+
+  def get_rec_prob_func(self):
+    # Works with NCE
+    x, y = T.ivectors('x', 'y')
+    rec_prob_func = theano.function([x, y], self.get_sym_rec_prob(x, y))
+    return rec_prob_func
 
   def set_repr_params(self, repr_param_vals):
     for i, param_val in enumerate(repr_param_vals):
