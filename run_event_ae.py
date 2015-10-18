@@ -87,7 +87,7 @@ if use_pretrained_wordrep:
     if word in pt_word_rep:
       init_wordrep[w_ind[word]] = pt_word_rep[word]
       num_words_covered += 1
-  print >>sys.stderr, "Using pretrained word representations from %s"%(sys.argv[3])
+  print >>sys.stderr, "Using pretrained word representations from %s"%(args.pt_rep)
   print >>sys.stderr, "\tcoverage is %f"%(float(num_words_covered)/len(w_ind))
 
 def get_mle_y(x_datum, y_s_datum):
