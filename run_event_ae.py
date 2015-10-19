@@ -14,7 +14,8 @@ argparser = argparse.ArgumentParser(description="Run Selectional Preference Auto
 argparser.add_argument('train_file', metavar="TRAIN-FILE", type=str, help="File containing n-tuples to train on")
 argparser.add_argument('word_types', metavar="WORD-TYPES", type=str, help="String showing the WordNet POS types of the words in the train file, separated by _. Eg. a_n for adj-noun, v_n_n for verb-noun-noun etc.")
 argparser.add_argument('--pt_rep', type=str, help="File containing pretrained embeddings")
-argparser.add_argument('--word_rep_param', type=bool, help="Should we make changes to word representations?", default=False)
+argparser.add_argument('--change_word_rep', help="Make changes to word representations (Default is False)", action='store_true')
+argparser.set_defaults(change_word_rep=False)
 argparser.add_argument('--word_dim', type=int, help="Dimensionality of word representations", default=50)
 argparser.add_argument('--concept_dim', type=int, help="Dimensionality of concept representations", default=50)
 argparser.add_argument('--write_model_freq', type=int, help="Frequency at which the model will be written to disk", default=1)
@@ -25,21 +26,16 @@ argparser.add_argument('--lr', type=float, help="Learning rate", default=0.01)
 argparser.add_argument('--max_iter', type=int, help="Maximum number of iterations", default=100)
 argparser.add_argument('--vocab_file', type=str, help="Word vocabulary file", default="vocab.txt")
 argparser.add_argument('--ont_file', type=str, help="Concept vocabulary file", default="ont.txt")
-argparser.add_argument('--em', type=bool, help="Use EM?", default=False)
-argparser.add_argument('--nce', type=bool, help="Use NCE for estimating encoding probability?", default=False)
+argparser.add_argument('--use_em', help="Use EM (Default is False)", action='store_true')
+argparser.set_defaults(use_em=False)
+argparser.add_argument('--use_nce', help="Use NCE for estimating encoding probability. (Default is False)", action='store_true')
+argparser.set_defaults(use_nce=False)
 argparser.add_argument('--hyp_model_type', type=str, help="Hypernymy model (weighted_prod, linlayer, tanhlayer)", default="weighted_prod")
 argparser.add_argument('--wc_pref_model_type', type=str, help="Word-concept preference model (weighted_prod, linlayer, tanhlayer)", default="tanhlayer")
 argparser.add_argument('--cc_pref_model_type', type=str, help="Concept-concept preference model (weighted_prod, linlayer, tanhlayer)", default="tanhlayer")
 args = argparser.parse_args()
-
-#word_rep_param = False
-#word_dim = 50
-#concept_dim = 50
-#write_model_freq = 100
 pred_arg_pos = args.word_types.split("_")
-#hyp_hidden_size = 20
 learning_rate = args.lr
-#max_iter = 100
 use_pretrained_wordrep = False 
 if args.pt_rep:
   use_pretrained_wordrep = True
@@ -76,8 +72,8 @@ vocab_size = len(w_ind)
 ont_size = len(c_ind)
 
 comp_starttime = time.time()
-event_ae = EventAE(num_args, vocab_size, ont_size, args.hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=args.word_dim, concept_dim=args.concept_dim, word_rep_param=args.word_rep_param, hyp_model_type=args.hyp_model_type, wc_pref_model_type=args.wc_pref_model_type, cc_pref_model_type=args.cc_pref_model_type)
-train_func = event_ae.get_train_func(learning_rate, em=args.em, nce=args.nce)
+event_ae = EventAE(num_args, vocab_size, ont_size, args.hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=args.word_dim, concept_dim=args.concept_dim, word_rep_param=args.change_word_rep, hyp_model_type=args.hyp_model_type, wc_pref_model_type=args.wc_pref_model_type, cc_pref_model_type=args.cc_pref_model_type)
+train_func = event_ae.get_train_func(learning_rate, em=args.use_em, nce=args.use_nce)
 post_score_func = event_ae.get_posterior_func()
 
 if use_pretrained_wordrep:
@@ -87,7 +83,7 @@ if use_pretrained_wordrep:
     if word in pt_word_rep:
       init_wordrep[w_ind[word]] = pt_word_rep[word]
       num_words_covered += 1
-  print >>sys.stderr, "Using pretrained word representations from %s"%(sys.argv[3])
+  print >>sys.stderr, "Using pretrained word representations from %s"%(args.pt_rep)
   print >>sys.stderr, "\tcoverage is %f"%(float(num_words_covered)/len(w_ind))
 
 def get_mle_y(x_datum, y_s_datum):
