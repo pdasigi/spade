@@ -1,3 +1,4 @@
+import sys
 import theano, numpy
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
@@ -12,7 +13,18 @@ SMALL_NUM = 1e-30
 LOG_SMALL_NUM = numpy.log(SMALL_NUM)
 
 class EventAE(object):
-  def __init__(self, num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=50, concept_dim=50, word_rep_param=True, hyp_model_type="weighted_prod", wc_pref_model_type="tanhlayer", cc_pref_model_type="tanhlayer"):
+  def __init__(self, num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=50, concept_dim=50, word_rep_param=False, hyp_model_type="weighted_prod", wc_pref_model_type="tanhlayer", cc_pref_model_type="tanhlayer"):
+    print >>sys.stderr, "Initializing SPADE"
+    print >>sys.stderr, "num_args: %d"%(num_args)
+    print >>sys.stderr, "vocab_size: %d"%(vocab_size)
+    print >>sys.stderr, "ont_size: %d"%(ont_size)
+    print >>sys.stderr, "word_dim: %d"%(word_dim)
+    print >>sys.stderr, "concept_dim: %d"%(concept_dim)
+    print >>sys.stderr, "word_rep_param: %s"%(word_rep_param)
+    print >>sys.stderr, "hyp_model: %s"%(hyp_model_type)
+    print >>sys.stderr, "wc_pref_model: %s"%(wc_pref_model_type)
+    print >>sys.stderr, "cc_pref_model: %s"%(cc_pref_model_type)
+
     numpy_rng = numpy.random.RandomState(12345)
     self.theano_rng = RandomStreams(12345)
     self.ont_size = ont_size
@@ -179,6 +191,7 @@ class EventAE(object):
   
 
   def get_train_func(self, learning_rate, nce=True, em=False):
+    print >>sys.stderr, "Trainining type: EM = %s, NCE = %s"%(em, nce)
     # TODO: Implement AdaGrad
     x, y_s = T.ivector("x"), T.imatrix("y_s")
     if em:
