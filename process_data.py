@@ -50,7 +50,7 @@ class DataProcessor(object):
       hypernyms.extend(list(self.get_hypernyms_syn(syn, path_cutoff=self.syn_path_cutoff)))
     return set(hypernyms)
 
-  def make_data(self, filename):
+  def make_data(self, filename, relaxed=False):
     datafile = codecs.open(filename, "r", "utf-8")
     x_data = []
     y_s_data = []
@@ -100,13 +100,22 @@ class DataProcessor(object):
         if w not in word_hypernym_map:
           word_hypernym_map[w] = h_list
       
-      x_data.append([word_index[x] for x in w_datum])
       w_hyp_inds = []
       for w in w_datum:
         w_hyps = word_hypernym_map[w]
         h_inds = [concept_index[y] for y in w_hyps]
         w_hyp_inds.append(h_inds)
-      y_s_datum = [list(l) for l in itertools.product(*w_hyp_inds)]
-      y_s_data.append(y_s_datum)        
+
+      if relaxed:
+        for i, w_i in enumerate(w_datum):
+          for j, w_a in enumerate(w_datum):
+            if i == j:
+              continue
+            x_data.append([word_index[w_i], word_index[w_a], j])
+            y_s_data.append(w_hyp_inds[i])
+      else:
+        x_data.append([word_index[x] for x in w_datum])
+        y_s_datum = [list(l) for l in itertools.product(*w_hyp_inds)]
+        y_s_data.append(y_s_datum)        
     return x_data, y_s_data, word_index, concept_index, word_hypernym_map
 
