@@ -83,6 +83,7 @@ event_ae = EventAE(num_args, vocab_size, ont_size, args.hyp_hidden_size, wc_hidd
 
 if args.use_relaxation:
   train_funcs = [event_ae.get_relaxed_train_func(learning_rate, s) for s in range(num_slots)]
+  post_score_funcs = [event_ae.get_relaxed_posterior_func(s) for s in range(num_slots)]
 else:
   train_func = event_ae.get_train_func(learning_rate, em=args.use_em, nce=args.use_nce)
   post_score_func = event_ae.get_posterior_func()
@@ -102,7 +103,12 @@ def get_mle_y(x_datum, y_s_datum):
   max_score = -float("inf")
   best_y = []
   for y_datum in y_s_datum:
-    score = post_score_func(numpy.asarray(x_datum, dtype='int32'), numpy.asarray(y_datum, dtype='int32'))
+    if args.use_relaxation:
+      s = x_datum[-1]
+      post_score_func = post_score_funcs[s]
+      score = post_score_func(numpy.asarray(x_datum[:-1], dtype='int32'), numpy.asarray(y_datum, dtype='int32'))
+    else:
+      score = post_score_func(numpy.asarray(x_datum, dtype='int32'), numpy.asarray(y_datum, dtype='int32'))
     if score > max_score:
       max_score = score
       best_y = y_datum
@@ -161,7 +167,7 @@ for num_iter in range(args.max_iter):
     rec_param_out.close()
     print >>sys.stderr, "Sanity test output:"
     for (x_datum, y_s_datum) in sanity_test_data:
-      x_words = [rev_w_ind[x_ind] for x_ind in x_datum]
+      x_words = [rev_w_ind[x_ind] for x_ind in x_datum[:-1]] if args.use_relaxation else [rev_w_ind[x_ind] for x_ind in x_datum]
       best_y_ind, best_score = get_mle_y(x_datum, y_s_datum)
       y_concepts = [rev_c_ind[ind] for ind in best_y_ind]
       print >>sys.stderr, "x: %s"%(" ".join(x_words))
