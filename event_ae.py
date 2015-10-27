@@ -269,6 +269,13 @@ class EventAE(object):
     train_func = theano.function([x, y_s], cost, updates=updates)
     return train_func
 
+  def get_relaxed_posterior_func(self, s):
+    # Works with NCE
+    x = T.ivector('x')
+    y = T.iscalar('y')
+    posterior_func = theano.function([x, y], self.get_sym_relaxed_posterior_num(x, y, s))
+    return posterior_func
+
   def set_repr_params(self, repr_param_vals):
     for i, param_val in enumerate(repr_param_vals):
       self.repr_params[i].set_value(param_val)
