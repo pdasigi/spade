@@ -20,6 +20,9 @@ argparser.add_argument('--use_em', help="Use EM (Default is False)", action='sto
 argparser.set_defaults(use_em=False)
 argparser.add_argument('--use_nce', help="Use NCE for estimating encoding probability. (Default is False)", action='store_true')
 argparser.set_defaults(use_nce=False)
+argparser.add_argument('--hyp_model_type', type=str, help="Hypernymy model (weighted_prod, linlayer, tanhlayer)", default="weighted_prod")
+argparser.add_argument('--wc_pref_model_type', type=str, help="Word-concept preference model (weighted_prod, linlayer, tanhlayer)", default="tanhlayer")
+argparser.add_argument('--cc_pref_model_type', type=str, help="Concept-concept preference model (weighted_prod, linlayer, tanhlayer)", default="tanhlayer")
 argparser.add_argument('--param_iter', type=int, help="Iteration of learned param to use (default 1)", default=1)
 args = argparser.parse_args()
 
@@ -60,7 +63,7 @@ for line in train_ont_file:
 
 vocab_size = len(train_vocab_map)
 ont_size = len(train_ont_map)
-event_ae = EventAE(num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, relaxed=use_relaxation)
+event_ae = EventAE(num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, relaxed=use_relaxation, hyp_model_type=args.hyp_model_type, wc_pref_model_type=args.wc_pref_model_type, cc_pref_model_type=args.cc_pref_model_type)
 #for i, param in enumerate(repr_params):
 #  event_ae.repr_params[i].set_value(param)
 event_ae.vocab_rep.set_value(vocab_rep)
