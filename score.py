@@ -1,5 +1,6 @@
 import sys
 import codecs
+import gzip
 import argparse
 import cPickle
 import theano
@@ -16,6 +17,7 @@ argparser.add_argument('--vocab_file', type=str, help="Word vocabulary file", de
 argparser.add_argument('--ont_file', type=str, help="Concept vocabulary file", default="ont.txt")
 argparser.add_argument('--use_relaxation', help="Ignore inter-concept preferences and optimize", action='store_true')
 argparser.set_defaults(use_relaxation=False)
+argparser.add_argument('--pt_rep', type=str, help="File containing pretrained embeddings")
 argparser.add_argument('--use_em', help="Use EM (Default is False)", action='store_true')
 argparser.set_defaults(use_em=False)
 argparser.add_argument('--use_nce', help="Use NCE for estimating encoding probability. (Default is False)", action='store_true')
@@ -37,6 +39,12 @@ hyp_hidden_size = 20
 wc_hidden_sizes = [20] * num_slots
 cc_hidden_sizes = [20] * num_args
 
+use_pretrained_wordrep = False
+if args.pt_rep:
+  print >>sys.stderr, "Using pretrained word representations from %s"%(args.pt_rep)
+  use_pretrained_wordrep = True
+  pt_word_rep = {l.split()[0]: numpy.asarray([float(f) for f in l.strip().split()[1:]]) for l in gzip.open(args.pt_rep)}
+
 train_vocab_file = codecs.open(args.vocab_file, "r", "utf-8")
 train_ont_file = codecs.open(args.ont_file, "r", "utf-8")
 vocab_rep, ont_rep = cPickle.load(open("repr_params_%d.pkl"%args.param_iter, "rb"))
@@ -46,6 +54,11 @@ if not use_relaxation:
   ccp_params = cPickle.load(open("ccp_params_%d.pkl"%args.param_iter, "rb"))
 rec_params = cPickle.load(open("rec_params_%d.pkl"%args.param_iter, "rb"))
 
+_, word_dim = vocab_rep.shape
+word_rep_min, word_rep_max = vocab_rep.min(), vocab_rep.max()
+_, conc_dim = ont_rep.shape
+conc_rep_min, conc_rep_max = ont_rep.min(), ont_rep.max()
+numpy_rng = numpy.random.RandomState(12345)
 
 train_vocab_map = {}
 rev_train_vocab_map = {}
@@ -63,6 +76,83 @@ for line in train_ont_file:
 
 vocab_size = len(train_vocab_map)
 ont_size = len(train_ont_map)
+
+test_train_vocab_map = {}
+test_train_ont_map = {}
+ignored_c_inds = set([])
+
+num_new_words = 0
+if use_pretrained_wordrep:
+  num_new_words_found = 0
+
+for w in w_ind:
+  if w in train_vocab_map:
+    train_ind = train_vocab_map[w]
+  else:
+    num_new_words += 1
+    if use_pretrained_wordrep:
+      if w in pt_word_rep:
+        num_new_words_found += 1
+        w_rep = numpy.asarray([pt_word_rep[w]])
+      else:
+        w_rep = numpy_rng.uniform(low = word_rep_min, high = word_rep_max, size=(1,word_dim))
+    else:
+      w_rep = numpy_rng.uniform(low = word_rep_min, high = word_rep_max, size=(1,word_dim))
+    vocab_rep = numpy.concatenate([vocab_rep, w_rep])
+    vocab_size += 1
+    train_ind = vocab_size - 1
+  #train_ind = train_vocab_map[w] if w in train_vocab_map else train_vocab_map["pele"]
+  test_train_vocab_map[w_ind[w]] = train_ind
+
+print >>sys.stderr, "New words in test set: %d"%num_new_words
+if num_new_words > 0 and use_pretrained_wordrep:
+  print >>sys.stderr, "%.2f found in pretrained rep"%(float(num_new_words_found)/num_new_words)
+
+num_new_concepts = 0
+for c in c_ind:
+  if c in train_ont_map:
+    train_ind = train_ont_map[c]
+  else:
+    num_new_concepts += 1
+    c_rep = numpy_rng.uniform(low = conc_rep_min, high = conc_rep_max, size=(1,conc_dim))
+    ont_rep = numpy.concatenate([ont_rep, c_rep])
+    ont_size += 1
+    train_ind = ont_size - 1
+  test_train_ont_map[c_ind[c]] = train_ind
+print >>sys.stderr, "New concepts in test set: %d"%num_new_concepts
+
+fixed_data = []
+
+ignored_y_cands = 0
+
+for x_datum, y_s_datum in zip(x_data, y_s_data):
+  fixed_x = [test_train_vocab_map[ind] for ind in x_datum[:-1]] + [x_datum[-1]] if args.use_relaxation else [test_train_vocab_map[ind] for ind in x_datum]
+  fixed_y_s = []
+  if args.use_relaxation:
+    for y_datum in y_s_datum:
+      if y_datum not in test_train_ont_map:
+        ignored_y_cands += 1
+        continue
+      fixed_y_s.append(test_train_ont_map[y_datum])
+  else:
+    for y_datum in y_s_datum:
+      fixed_y = []
+      all_present = True
+      for y_ind in y_datum:
+        if y_ind not in test_train_ont_map:
+          all_present = False
+          ignored_y_cands += 1
+          break
+        fixed_y.append(test_train_ont_map[y_ind])
+      if all_present:
+        fixed_y_s.append(fixed_y)
+  #fixed_y_s = [[test_train_ont_map[ind] for ind in y_datum] for y_datum in y_s_datum]
+  fixed_data.append((fixed_x, fixed_y_s))
+
+print >>sys.stderr, "Ignored an average of %f y cands per data point"%(float(ignored_y_cands)/len(fixed_data))
+print >>sys.stderr, len(x_data), len(y_s_data), len(fixed_data)
+
+
 event_ae = EventAE(num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, relaxed=use_relaxation, hyp_model_type=args.hyp_model_type, wc_pref_model_type=args.wc_pref_model_type, cc_pref_model_type=args.cc_pref_model_type)
 #for i, param in enumerate(repr_params):
 #  event_ae.repr_params[i].set_value(param)
@@ -118,53 +208,6 @@ def get_mle_y(x_datum, y_s_datum):
       best_y = y_datum
   return best_y, max_score
 
-test_train_vocab_map = {}
-test_train_ont_map = {}
-ignored_c_inds = set([])
-
-for w in w_ind:
-  train_ind = train_vocab_map[w] if w in train_vocab_map else train_vocab_map["pele"]
-  test_train_vocab_map[w_ind[w]] = train_ind
-
-
-for c in c_ind:
-  if c not in train_ont_map:
-    ignored_c_inds.add(c_ind[c])
-    continue
-  train_ind = train_ont_map[c]
-  test_train_ont_map[c_ind[c]] = train_ind
-
-print >>sys.stderr, "Ignored %d concepts"%(len(ignored_c_inds))
-fixed_data = []
-
-ignored_y_cands = 0
-
-for x_datum, y_s_datum in zip(x_data, y_s_data):
-  fixed_x = [test_train_vocab_map[ind] for ind in x_datum[:-1]] + [x_datum[-1]] if args.use_relaxation else [test_train_vocab_map[ind] for ind in x_datum]
-  fixed_y_s = []
-  if args.use_relaxation:
-    for y_datum in y_s_datum:
-      if y_datum not in test_train_ont_map:
-        ignored_y_cands += 1
-        continue
-      fixed_y_s.append(test_train_ont_map[y_datum])
-  else:
-    for y_datum in y_s_datum:
-      fixed_y = []
-      all_present = True
-      for y_ind in y_datum:
-        if y_ind not in test_train_ont_map:
-          all_present = False
-          ignored_y_cands += 1
-          break
-        fixed_y.append(test_train_ont_map[y_ind])
-      if all_present:
-        fixed_y_s.append(fixed_y)
-  #fixed_y_s = [[test_train_ont_map[ind] for ind in y_datum] for y_datum in y_s_datum]
-  fixed_data.append((fixed_x, fixed_y_s))
-
-print >>sys.stderr, "Ignored an average of %f y cands per data point"%(float(ignored_y_cands)/len(fixed_data))
-print >>sys.stderr, len(x_data), len(y_s_data), len(fixed_data)
 
 if args.use_relaxation:
   points_per_struct = num_slots * (num_slots - 1)
