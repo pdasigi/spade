@@ -1,6 +1,7 @@
 import sys
 import codecs, re
 import itertools
+import operator
 from nltk.corpus import wordnet as wn
 
 class DataProcessor(object):
@@ -9,9 +10,9 @@ class DataProcessor(object):
     # Examples: nsubj-dobj: ['v', 'n', 'n'], nn: ['n', 'n'], amod: ['n', 'a']
     self.pred_arg_pos = pred_arg_pos
     if len(pred_arg_pos) == 2:
-        self.word_syn_cutoff = -1
-        self.syn_path_cutoff = -1
-        self.thing_syn_cutoff = -1
+        self.word_syn_cutoff = 3
+        self.syn_path_cutoff = 5
+        self.thing_syn_cutoff = 4
     else:
         # Recommendations for verb-subj-obj
         self.word_syn_cutoff = 2
@@ -50,13 +51,15 @@ class DataProcessor(object):
       hypernyms.extend(list(self.get_hypernyms_syn(syn, path_cutoff=self.syn_path_cutoff)))
     return set(hypernyms)
 
-  def make_data(self, filename, relaxed=False):
+  def make_data(self, filename, relaxed=False, handle_oov=True):
     datafile = codecs.open(filename, "r", "utf-8")
     x_data = []
     y_s_data = []
     word_hypernym_map = {}
     word_index = {}
     concept_index = {}
+    word_freqs = {}
+    concept_freqs = {}
     for line in datafile:
       line_parts = line.strip().split('\t')
       slot_hypernyms = []
@@ -90,13 +93,21 @@ class DataProcessor(object):
           hypernyms = [word]
         slot_hypernyms.append((word, hypernyms))
         if word not in word_index:
-            word_index[word] = len(word_index)
+          word_index[word] = len(word_index)
+        if word in word_freqs:
+          word_freqs[word] += 1
+        else:
+          word_freqs[word] = 1  
         w_datum.append(word)
 
       for w, h_list in slot_hypernyms:
         for h in h_list:
           if h not in concept_index:
             concept_index[h] = len(concept_index)
+        if h in concept_freqs:
+          concept_freqs[h] += 1
+        else:
+          concept_freqs[h] = 1  
         if w not in word_hypernym_map:
           word_hypernym_map[w] = h_list
       
@@ -116,6 +127,49 @@ class DataProcessor(object):
       else:
         x_data.append([word_index[x] for x in w_datum])
         y_s_datum = [list(l) for l in itertools.product(*w_hyp_inds)]
-        y_s_data.append(y_s_datum)        
-    return x_data, y_s_data, word_index, concept_index, word_hypernym_map
+        y_s_data.append(y_s_datum)
+    if handle_oov:
+      w_oov_num = int(0.01 * len(word_index))
+      c_oov_num = int(0.01 * len(concept_index))
+      w_oov = [w for w,_ in sorted(word_freqs.items(), key=operator.itemgetter(1))[:w_oov_num]]
+      c_oov = [c for c,_ in sorted(concept_freqs.items(), key=operator.itemgetter(1))[:c_oov_num]]
+      w_oov = set(w_oov)
+      c_oov = set(c_oov)
+      w_oov_ind = 0
+      c_oov_ind = 0
+      fixed_word_index = {'UNK': w_oov_ind}
+      fixed_concept_index = {'UNK': c_oov_ind}
+      w_ind_mapping = {}
+      c_ind_mapping = {}
+      for word in word_index:
+        if word in w_oov:
+          w_ind_mapping[word_index[word]] = w_oov_ind
+        else:
+          fixed_word_ind = len(fixed_word_index)
+          fixed_word_index[word] = fixed_word_ind
+          w_ind_mapping[word_index[word]] = fixed_word_ind
+          
+      for concept in concept_index:
+        if concept in c_oov:
+          c_ind_mapping[concept_index[concept]] = c_oov_ind
+        else:
+          fixed_concept_ind = len(fixed_concept_index)
+          fixed_concept_index[concept] = fixed_concept_ind
+          c_ind_mapping[concept_index[concept]] = fixed_concept_ind
+
+      fixed_x_data = []
+      fixed_y_s_data = []
+      for x_datum, y_s_datum in zip(x_data, y_s_data):
+        if relaxed:
+          fixed_x_datum = [w_ind_mapping[ind] for ind in x_datum[:-1]]
+          fixed_x_datum.append(x_datum[-1])
+          fixed_y_s_datum = [c_ind_mapping[ind] for ind in y_s_datum]
+        else:
+          fixed_x_datum = [w_ind_mapping[ind] for ind in x_datum]
+          fixed_y_s_datum = [[c_ind_mapping[ind] for ind in y_datum] for y_datum in y_s_datum]
+        fixed_x_data.append(fixed_x_datum)
+        fixed_y_s_data.append(fixed_y_s_datum)
+      return fixed_x_data, fixed_y_s_data, fixed_word_index, fixed_concept_index, word_hypernym_map, w_oov, c_oov
+    else:
+      return x_data, y_s_data, word_index, concept_index, word_hypernym_map, set(), set()
 

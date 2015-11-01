@@ -17,7 +17,7 @@ argparser.add_argument('--vocab_file', type=str, help="Word vocabulary file", de
 argparser.add_argument('--ont_file', type=str, help="Concept vocabulary file", default="ont.txt")
 argparser.add_argument('--use_relaxation', help="Ignore inter-concept preferences and optimize", action='store_true')
 argparser.set_defaults(use_relaxation=False)
-argparser.add_argument('--pt_rep', type=str, help="File containing pretrained embeddings")
+#argparser.add_argument('--pt_rep', type=str, help="File containing pretrained embeddings")
 argparser.add_argument('--use_em', help="Use EM (Default is False)", action='store_true')
 argparser.set_defaults(use_em=False)
 argparser.add_argument('--use_nce', help="Use NCE for estimating encoding probability. (Default is False)", action='store_true')
@@ -31,7 +31,7 @@ args = argparser.parse_args()
 use_relaxation = args.use_relaxation
 pred_arg_pos = args.word_types.split("_")
 dp = DataProcessor(pred_arg_pos)
-x_data, y_s_data, w_ind, c_ind, _ = dp.make_data(args.test_file, relaxed=args.use_relaxation)
+x_data, y_s_data, w_ind, c_ind, _, _, _ = dp.make_data(args.test_file, relaxed=args.use_relaxation, handle_oov=False)
 
 num_slots = len(pred_arg_pos)
 num_args = num_slots - 1
@@ -39,11 +39,11 @@ hyp_hidden_size = 20
 wc_hidden_sizes = [20] * num_slots
 cc_hidden_sizes = [20] * num_args
 
-use_pretrained_wordrep = False
-if args.pt_rep:
-  print >>sys.stderr, "Using pretrained word representations from %s"%(args.pt_rep)
-  use_pretrained_wordrep = True
-  pt_word_rep = {l.split()[0]: numpy.asarray([float(f) for f in l.strip().split()[1:]]) for l in gzip.open(args.pt_rep)}
+#use_pretrained_wordrep = False
+#if args.pt_rep:
+#  print >>sys.stderr, "Using pretrained word representations from %s"%(args.pt_rep)
+#  use_pretrained_wordrep = True
+#  pt_word_rep = {l.split()[0]: numpy.asarray([float(f) for f in l.strip().split()[1:]]) for l in gzip.open(args.pt_rep)}
 
 train_vocab_file = codecs.open(args.vocab_file, "r", "utf-8")
 train_ont_file = codecs.open(args.ont_file, "r", "utf-8")
@@ -81,45 +81,49 @@ test_train_vocab_map = {}
 test_train_ont_map = {}
 ignored_c_inds = set([])
 
-num_new_words = 0
-if use_pretrained_wordrep:
-  num_new_words_found = 0
+new_words = []
+#if use_pretrained_wordrep:
+#  num_new_words_found = 0
 
 for w in w_ind:
   if w in train_vocab_map:
     train_ind = train_vocab_map[w]
   else:
-    num_new_words += 1
-    if use_pretrained_wordrep:
-      if w in pt_word_rep:
-        num_new_words_found += 1
-        w_rep = numpy.asarray([pt_word_rep[w]])
-      else:
-        w_rep = numpy_rng.uniform(low = word_rep_min, high = word_rep_max, size=(1,word_dim))
-    else:
-      w_rep = numpy_rng.uniform(low = word_rep_min, high = word_rep_max, size=(1,word_dim))
-    vocab_rep = numpy.concatenate([vocab_rep, w_rep])
-    vocab_size += 1
-    train_ind = vocab_size - 1
+    new_words.append(w)
+    #if use_pretrained_wordrep:
+    #  if w in pt_word_rep:
+    #    num_new_words_found += 1
+    #    w_rep = numpy.asarray([pt_word_rep[w]])
+    #  else:
+    #    w_rep = numpy_rng.uniform(low = word_rep_min, high = word_rep_max, size=(1,word_dim))
+    #else:
+    #w_rep = numpy_rng.uniform(low = word_rep_min, high = word_rep_max, size=(1,word_dim))
+    #vocab_rep = numpy.concatenate([vocab_rep, w_rep])
+    #vocab_size += 1
+    #train_ind = vocab_size - 1
+    train_ind = 0 # for UNK
   #train_ind = train_vocab_map[w] if w in train_vocab_map else train_vocab_map["pele"]
   test_train_vocab_map[w_ind[w]] = train_ind
 
-print >>sys.stderr, "New words in test set: %d"%num_new_words
-if num_new_words > 0 and use_pretrained_wordrep:
-  print >>sys.stderr, "%.2f found in pretrained rep"%(float(num_new_words_found)/num_new_words)
+#num_new_words = len(new_words)
+print >>sys.stderr, "New words in test set: %s"%new_words
+#if num_new_words > 0 and use_pretrained_wordrep:
+#  print >>sys.stderr, "%.2f found in pretrained rep"%(float(num_new_words_found)/num_new_words)
 
-num_new_concepts = 0
+new_concepts = []
 for c in c_ind:
   if c in train_ont_map:
     train_ind = train_ont_map[c]
   else:
-    num_new_concepts += 1
-    c_rep = numpy_rng.uniform(low = conc_rep_min, high = conc_rep_max, size=(1,conc_dim))
-    ont_rep = numpy.concatenate([ont_rep, c_rep])
-    ont_size += 1
-    train_ind = ont_size - 1
+    new_concepts.append(c)
+    #c_rep = numpy_rng.uniform(low = conc_rep_min, high = conc_rep_max, size=(1,conc_dim))
+    #ont_rep = numpy.concatenate([ont_rep, c_rep])
+    #ont_size += 1
+    #train_ind = ont_size - 1
+    train_ind = 0 # for UNK
   test_train_ont_map[c_ind[c]] = train_ind
-print >>sys.stderr, "New concepts in test set: %d"%num_new_concepts
+num_new_concepts = len(new_concepts)
+print >>sys.stderr, "New concepts in test set: %s"%new_concepts
 
 fixed_data = []
 
