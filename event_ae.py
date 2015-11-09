@@ -13,7 +13,7 @@ SMALL_NUM = 1e-30
 LOG_SMALL_NUM = numpy.log(SMALL_NUM)
 
 class EventAE(object):
-  def __init__(self, num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=50, concept_dim=50, word_rep_param=False, hyp_model_type="weighted_prod", wc_pref_model_type="tanhlayer", cc_pref_model_type="tanhlayer", relaxed=False):
+  def __init__(self, num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=50, concept_dim=50, word_rep_param=False, hyp_model_type="weighted_prod", wc_pref_model_type="tanhlayer", cc_pref_model_type="tanhlayer", relaxed=False, wc_lr_wp_rank=10, cc_lr_wp_rank=10):
     print >>sys.stderr, "Initializing SPADE"
     print >>sys.stderr, "num_args: %d"%(num_args)
     print >>sys.stderr, "vocab_size: %d"%(vocab_size)
@@ -23,10 +23,14 @@ class EventAE(object):
     print >>sys.stderr, "word_rep_param: %s"%(word_rep_param)
     print >>sys.stderr, "hyp_model: %s"%(hyp_model_type)
     print >>sys.stderr, "wc_pref_model: %s"%(wc_pref_model_type)
+    if wc_pref_model_type == "lr_weighted_prod":
+      print >>sys.stderr, "wc_lr_wp_rank: %d"%(wc_lr_wp_rank)
     if relaxed:
       print >>sys.stderr, "Running without inter-concept preferences"
     else:
       print >>sys.stderr, "cc_pref_model: %s"%(cc_pref_model_type)
+      if cc_pref_model_type == "lr_weighted_prod":
+        print >>sys.stderr, "cc_lr_wp_rank: %d"%(cc_lr_wp_rank)
 
     numpy_rng = numpy.random.RandomState(12345)
     self.theano_rng = RandomStreams(12345)
@@ -48,13 +52,13 @@ class EventAE(object):
     self.num_slots = num_args + 1 # +1 for the predicate
     self.num_args = num_args
     for i in range(self.num_slots):
-      wc_pref_model = PreferenceModel('word_concept', wc_pref_model_type, wc_hidden_sizes[i], self.ont_rep, self.vocab_rep)
+      wc_pref_model = PreferenceModel('word_concept', wc_pref_model_type, wc_hidden_sizes[i], self.ont_rep, self.vocab_rep, lr_wp_rank=wc_lr_wp_rank)
       self.wc_pref_models.append(wc_pref_model)
       self.enc_params.extend(wc_pref_model.get_params())
 
     if not self.relaxed:  
       for i in range(num_args):
-        cc_pref_model = PreferenceModel('concept_concept', cc_pref_model_type, cc_hidden_sizes[i], self.ont_rep)
+        cc_pref_model = PreferenceModel('concept_concept', cc_pref_model_type, cc_hidden_sizes[i], self.ont_rep, lr_wp_rank=cc_lr_wp_rank)
         self.cc_pref_models.append(cc_pref_model)
         self.enc_params.extend(cc_pref_model.get_params())
     self.rec_model = ReconstructionModel(self.ont_rep, self.vocab_rep)

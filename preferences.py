@@ -2,7 +2,7 @@ import numpy, theano
 from theano import tensor as T
 
 class PreferenceModel(object):
-  def __init__(self, pref_type, modelname, hidden_size, ont_rep, vocab_rep=None):
+  def __init__(self, pref_type, modelname, hidden_size, ont_rep, vocab_rep=None, lr_wp_rank = 10):
     """
     pref_type (string):  Indicate whether the preference being modeled is word-concept or concept-concept (word_concept, concept_concept)
     modelname (string):  Select the parameterization of the model ('lincomb')
@@ -15,7 +15,7 @@ class PreferenceModel(object):
         raise RuntimeError, "vocab_rep has to be given when pref_type is word_concept"
     else:
       self.pref_type = 'concept_concept'
-    impl_models = ['linlayer', 'tanhlayer', 'weighted_prod']
+    impl_models = ['linlayer', 'tanhlayer', 'weighted_prod', 'lr_weighted_prod']
     if modelname not in impl_models:
       raise NotImplementedError, "Model name %s not known"%(modelname)
     numpy_rng = numpy.random.RandomState(12345)
@@ -44,6 +44,12 @@ class PreferenceModel(object):
       init_prod_weight = numpy.asarray(numpy_rng.uniform(low = -1.0, high = 1.0, size = (ent1_dim, ent2_dim)))
       self.prod_weight = theano.shared(value = init_prod_weight, name = 'P_w')
       self.params = [self.prod_weight]
+    elif self.modelname == 'lr_weighted_prod':
+      init_prod_weight1 = numpy.asarray(numpy_rng.uniform(low = -1.0, high = 1.0, size = (ent1_dim, lr_wp_rank)))
+      init_prod_weight2 = numpy.asarray(numpy_rng.uniform(low = -1.0, high = 1.0, size = (lr_wp_rank, ent2_dim)))
+      self.prod_weight1 = theano.shared(value = init_prod_weight1, name = 'P_w1')
+      self.prod_weight2 = theano.shared(value = init_prod_weight2, name = 'P_w2')
+      self.params = [self.prod_weight1, self.prod_weight2]
 
   def get_symb_score(self, ent1_ind, ent2_ind):
     if self.pref_type == 'word_concept':
@@ -57,6 +63,8 @@ class PreferenceModel(object):
       pref_score = T.dot( self.score_weight, T.tanh(T.dot(self.proj_weight.T, T.concatenate([ent1_vec, ent2_vec])))) 
     elif self.modelname == 'weighted_prod':
       pref_score = T.dot(T.dot(ent1_vec, self.prod_weight), ent2_vec)
+    elif self.modelname == 'lr_weighted_prod':
+      pref_score = T.dot(T.dot(ent1_vec, self.prod_weight1), T.dot(self.prod_weight2, ent2_vec))
     return pref_score
 
   def get_params(self):
