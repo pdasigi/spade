@@ -185,28 +185,36 @@ def get_comp_prob(x_datum, y_s_datum):
 
 def get_relaxed_comp_prob(x_data, y_s_data):
   # This function expects num_slots * (num_slots - 1) datapoints to calculate the comp_prob for the entire predarg structure
-  logprob_sum = 0.0
+  logprobs = []
   for i in range(num_slots):
     for j in range(num_slots - 1):
       x_datum = x_data[i * (num_slots - 1) + j]
-      comp_prob_func = comp_prob_funcs[x_datum[-1]]
+      cprob_func = comp_prob_funcs[x_datum[-1]]
       y_s_datum = y_s_data[i * (num_slots - 1) + j]
       if len(y_s_datum) == 0:
-        logprob_sum += -float("inf")
+        logprobs.append(-float("inf"))
         break
       else:
-        logprob_sum += comp_prob_func(numpy.asarray(x_datum, dtype='int32'), numpy.asarray(y_s_datum, dtype='int32'))
+        logprobs.append(cprob_func(numpy.asarray(x_datum, dtype='int32'), numpy.asarray(y_s_datum, dtype='int32')))
       
-  return logprob_sum
+  return logprobs
 
-if not args.use_relaxation:
+if args.use_relaxation:
+  post_score_funcs = [event_ae.get_relaxed_posterior_func(s) for s in range(num_slots)]
+else:
   post_score_func = event_ae.get_posterior_func()
 
 def get_mle_y(x_datum, y_s_datum):
   max_score = -float("inf")
   best_y = []
   for y_datum in y_s_datum:
-    score = post_score_func(numpy.asarray(x_datum, dtype='int32'), numpy.asarray(y_datum, dtype='int32'))
+    if args.use_relaxation:
+      s = x_datum[-1]
+      pscore_func = post_score_funcs[s]
+      score = numpy.log(pscore_func(numpy.asarray(x_datum[:-1], dtype='int32'), numpy.asarray(y_datum, dtype='int32')))
+    else:
+      global post_score_func
+      score = post_score_func(numpy.asarray(x_datum, dtype='int32'), numpy.asarray(y_datum, dtype='int32'))
     if score > max_score:
       max_score = score
       best_y = y_datum
@@ -217,10 +225,17 @@ if args.use_relaxation:
   points_per_struct = num_slots * (num_slots - 1)
   for i in range(0, len(fixed_data), points_per_struct):
     x_data = [x_datum for x_datum, _ in fixed_data[i:i+points_per_struct]]
-    y_s_data = [y_s_datum for _, y_s_datum in fixed_data[i:i+points_per_struct]] 
+    y_s_data = [y_s_datum for _, y_s_datum in fixed_data[i:i+points_per_struct]]
+    mle_y_out = [get_mle_y(x_d, y_s_d) for x_d, y_s_d in zip(x_data, y_s_data)]
+    mle_ys, mle_y_scores = zip(*mle_y_out)
+    mle_y_words = [rev_train_ont_map[ind] for ind in mle_ys]
     #print >>sys.stderr, x_data, y_s_data
-    comp_prob = get_relaxed_comp_prob(x_data, y_s_data)
-    print comp_prob
+    logprobs = get_relaxed_comp_prob(x_data, y_s_data)
+    comp_prob = sum(logprobs)
+    mle_prob = sum(mle_y_scores)
+    print comp_prob, (" ".join(mle_y_words)).encode("utf-8")
+    #print " ".join(str(f) for f in logprobs), (" ".join(mle_y_words)).encode("utf-8")
+    #print mle_prob
 else:
   for x_datum, y_s_datum in fixed_data:
     comp_prob = get_comp_prob(x_datum, y_s_datum) if len(y_s_datum) != 0 else -float("inf")
