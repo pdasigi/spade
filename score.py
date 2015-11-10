@@ -164,8 +164,9 @@ event_ae.vocab_rep.set_value(vocab_rep)
 event_ae.ont_rep.set_value(ont_rep)
 
 event_ae.hyp_model.set_params(hyp_params)
-for i, params in enumerate(wcp_params):
-  event_ae.wc_pref_models[i].set_params(params)
+for i, param_dict in enumerate(wcp_params):
+  for j in param_dict:
+    event_ae.wc_pref_models[i][j].set_params(param_dict[j])
 if not use_relaxation:
   for i, params in enumerate(ccp_params):
     event_ae.cc_pref_models[i].set_params(params)

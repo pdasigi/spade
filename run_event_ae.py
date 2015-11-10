@@ -122,6 +122,7 @@ comp_endtime = time.time()
 print >>sys.stderr, "Theano compilation took %d seconds"%(comp_endtime - comp_starttime)
 
 def synchronize_param():
+  raise NotImplementedError, "wcp param averaging should be changed to deal with the new dict structure"
   all_repr_params = [ [param.get_value() for param in eae.repr_params] for eae in eaes ]
   avg_repr_params = [numpy.mean(param, axis=0) for param in zip(*all_repr_params)]
   event_ae.set_repr_params(avg_repr_params)
@@ -133,7 +134,7 @@ def synchronize_param():
   event_ae.hyp_model.set_params(avg_hyp_params)
   for eae in eaes:
     eae.hyp_model.set_params(avg_hyp_params)
-  
+  #TODO: Fix averaging wcp_params given the new dict structure
   all_worker_model_wcp_params = [ [[param.get_value() for param in wcp_model.get_params()] for wcp_model in eae.wc_pref_models] for eae in eaes]
   for model_num, all_model_wcp_params in enumerate(zip(*all_worker_model_wcp_params)):
     avg_wcp_model_params = []
@@ -246,7 +247,7 @@ for num_iter in range(args.max_iter):
     cPickle.dump(hyp_params, hyp_param_out)
     hyp_param_out.close()
     wcp_param_out = open("wcp_params_%d.pkl"%(num_iter + 1), "wb")
-    wcp_params = [[param.get_value() for param in wcp_model.get_params()] for wcp_model in event_ae.wc_pref_models]
+    wcp_params = [{ i: [param.get_value() for param in wcp_models[i].get_params()] for i in wcp_models} for wcp_models in event_ae.wc_pref_models]
     cPickle.dump(wcp_params, wcp_param_out)
     wcp_param_out.close()
     if not args.use_relaxation:

@@ -51,11 +51,14 @@ class EventAE(object):
     self.cc_pref_models = []
     self.num_slots = num_args + 1 # +1 for the predicate
     self.num_args = num_args
+    self.wc_pref_models = [{} for _ in range(self.num_slots)]
     for i in range(self.num_slots):
-      wc_pref_model = PreferenceModel('word_concept', wc_pref_model_type, wc_hidden_sizes[i], self.ont_rep, "wc_%d"%i,  self.vocab_rep, lr_wp_rank=wc_lr_wp_rank)
-      self.wc_pref_models.append(wc_pref_model)
-      self.enc_params.extend(wc_pref_model.get_params())
-
+      for j in range(self.num_slots):
+        if i == j:
+          continue
+        wc_pref_model = PreferenceModel('word_concept', wc_pref_model_type, wc_hidden_sizes[i], self.ont_rep, "wc_%d_%d"%(i, j),  self.vocab_rep, lr_wp_rank=wc_lr_wp_rank)
+        self.wc_pref_models[i][j] = wc_pref_model
+        self.enc_params.extend(wc_pref_model.get_params())
     if not self.relaxed:  
       for i in range(num_args):
         cc_pref_model = PreferenceModel('concept_concept', cc_pref_model_type, cc_hidden_sizes[i], self.ont_rep, "cc_%d"%i,  lr_wp_rank=cc_lr_wp_rank)
@@ -79,7 +82,7 @@ class EventAE(object):
       for j in range(self.num_slots):
         if i == j:
           continue
-        p_w_c_sum += self.wc_pref_models[i].get_symb_score(x[i], y[j])
+        p_w_c_sum += self.wc_pref_models[i][j].get_symb_score(x[i], y[j])
     p_c_c_sum = T.constant(0)
     for i in range(self.num_args):
       p_c_c_sum += self.cc_pref_models[i].get_symb_score(y[0], y[i + 1])
@@ -237,7 +240,7 @@ class EventAE(object):
     for i in range(self.num_slots):
       if i == s:
         continue
-      p_sum += self.wc_pref_models[i].get_symb_score(x[i], y)
+      p_sum += self.wc_pref_models[i][s].get_symb_score(x[i], y)
     return h + p_sum
 
   def get_sym_relaxed_encoder_partition(self, x, y_s, s):
@@ -275,8 +278,7 @@ class EventAE(object):
     for i in range(self.num_slots):
       if i == s:
         continue
-      print >>sys.stderr, i
-      relaxed_enc_params.extend(self.wc_pref_models[i].get_params())
+      relaxed_enc_params.extend(self.wc_pref_models[i][s].get_params())
     params = self.repr_params + relaxed_enc_params + self.rec_params
     g_params = T.grad(cost, params)
     # Updating the parameters only if the norm of the gradient is less than 100.
