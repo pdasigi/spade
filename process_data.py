@@ -118,12 +118,10 @@ class DataProcessor(object):
         w_hyp_inds.append(h_inds)
 
       if relaxed:
-        for i, w_i in enumerate(w_datum):
-          for j, w_a in enumerate(w_datum):
-            if i == j:
-              continue
-            x_data.append([word_index[w_i], word_index[w_a], j])
-            y_s_data.append(w_hyp_inds[i])
+        w_inds = [word_index[x] for x in w_datum]
+        for i in range(len(w_datum)):
+          x_data.append(w_inds + [i])
+          y_s_data.append(w_hyp_inds[i])
       else:
         x_data.append([word_index[x] for x in w_datum])
         y_s_datum = [list(l) for l in itertools.product(*w_hyp_inds)]

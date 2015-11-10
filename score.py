@@ -187,16 +187,14 @@ def get_relaxed_comp_prob(x_data, y_s_data):
   # This function expects num_slots * (num_slots - 1) datapoints to calculate the comp_prob for the entire predarg structure
   logprobs = []
   for i in range(num_slots):
-    for j in range(num_slots - 1):
-      x_datum = x_data[i * (num_slots - 1) + j]
-      cprob_func = comp_prob_funcs[x_datum[-1]]
-      y_s_datum = y_s_data[i * (num_slots - 1) + j]
-      if len(y_s_datum) == 0:
-        logprobs.append(-float("inf"))
-        break
-      else:
-        logprobs.append(cprob_func(numpy.asarray(x_datum, dtype='int32'), numpy.asarray(y_s_datum, dtype='int32')))
-      
+    x_datum = x_data[i]
+    cprob_func = comp_prob_funcs[i]
+    y_s_datum = y_s_data[i]
+    if len(y_s_datum) == 0:
+      logprobs.append(-float("inf"))
+      break
+    else:
+      logprobs.append(cprob_func(numpy.asarray(x_datum, dtype='int32'), numpy.asarray(y_s_datum, dtype='int32')))
   return logprobs
 
 if args.use_relaxation:
@@ -222,10 +220,9 @@ def get_mle_y(x_datum, y_s_datum):
 
 
 if args.use_relaxation:
-  points_per_struct = num_slots * (num_slots - 1)
-  for i in range(0, len(fixed_data), points_per_struct):
-    x_data = [x_datum for x_datum, _ in fixed_data[i:i+points_per_struct]]
-    y_s_data = [y_s_datum for _, y_s_datum in fixed_data[i:i+points_per_struct]]
+  for i in range(0, len(fixed_data), num_slots):
+    x_data = [x_datum for x_datum, _ in fixed_data[i:i+num_slots]]
+    y_s_data = [y_s_datum for _, y_s_datum in fixed_data[i:i+num_slots]]
     mle_y_out = [get_mle_y(x_d, y_s_d) for x_d, y_s_d in zip(x_data, y_s_data)]
     mle_ys, mle_y_scores = zip(*mle_y_out)
     mle_y_words = [rev_train_ont_map[ind] for ind in mle_ys]

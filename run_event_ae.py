@@ -65,7 +65,7 @@ if len(c_oov) != 0:
 if not args.use_relaxation:
   num_slots = len(x_data[0])
 else:
-  num_slots = args.num_slots
+  num_slots = len(x_data[0]) - 1
 
 num_args = num_slots - 1
 

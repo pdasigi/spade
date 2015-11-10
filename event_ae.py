@@ -52,13 +52,13 @@ class EventAE(object):
     self.num_slots = num_args + 1 # +1 for the predicate
     self.num_args = num_args
     for i in range(self.num_slots):
-      wc_pref_model = PreferenceModel('word_concept', wc_pref_model_type, wc_hidden_sizes[i], self.ont_rep, self.vocab_rep, lr_wp_rank=wc_lr_wp_rank)
+      wc_pref_model = PreferenceModel('word_concept', wc_pref_model_type, wc_hidden_sizes[i], self.ont_rep, "wc_%d"%i,  self.vocab_rep, lr_wp_rank=wc_lr_wp_rank)
       self.wc_pref_models.append(wc_pref_model)
       self.enc_params.extend(wc_pref_model.get_params())
 
     if not self.relaxed:  
       for i in range(num_args):
-        cc_pref_model = PreferenceModel('concept_concept', cc_pref_model_type, cc_hidden_sizes[i], self.ont_rep, lr_wp_rank=cc_lr_wp_rank)
+        cc_pref_model = PreferenceModel('concept_concept', cc_pref_model_type, cc_hidden_sizes[i], self.ont_rep, "cc_%d"%i,  lr_wp_rank=cc_lr_wp_rank)
         self.cc_pref_models.append(cc_pref_model)
         self.enc_params.extend(cc_pref_model.get_params())
     self.rec_model = ReconstructionModel(self.ont_rep, self.vocab_rep)
@@ -231,9 +231,14 @@ class EventAE(object):
  
   ### Relaxed variant functions ### 
   def get_sym_relaxed_encoder_energy(self, x, y, s):
-    h = self.hyp_model.get_symb_score(x[0], y)
-    p = self.wc_pref_models[s].get_symb_score(x[1], y)
-    return h + p
+    h = self.hyp_model.get_symb_score(x[s], y)
+    p_sum = T.constant(0.0)
+    # We need to sum up the preference scores of words in all slots except s with y
+    for i in range(self.num_slots):
+      if i == s:
+        continue
+      p_sum += self.wc_pref_models[i].get_symb_score(x[i], y)
+    return h + p_sum
 
   def get_sym_relaxed_encoder_partition(self, x, y_s, s):
     partial_sums, _ = theano.scan(fn=lambda y, interm_sum, x_0: interm_sum + T.exp(self.get_sym_relaxed_encoder_energy(x_0, y, s)), outputs_info=numpy.asarray(0.0, dtype='float64'), sequences=[y_s], non_sequences=[x])
@@ -243,7 +248,7 @@ class EventAE(object):
   def get_sym_relaxed_posterior_num(self, x, y, s):
     # Needed for NCE
     enc_energy = self.get_sym_relaxed_encoder_energy(x, y, s)
-    rec_prob = self.rec_model.get_sym_rec_prob(x[0], y)
+    rec_prob = self.rec_model.get_sym_rec_prob(x[s], y)
     return T.exp(enc_energy) * rec_prob
       
   def get_sym_relaxed_posterior_partition(self, x, y_s, s):
@@ -263,8 +268,15 @@ class EventAE(object):
     # TODO: Implement AdaGrad
     # TODO: This means we need one train function per slot.  Do we?
     x, y_s = T.ivector("x"), T.ivector("y_s")
-    cost = -T.log(self.get_sym_relaxed_direct_prob(x, y_s, s))
-    relaxed_enc_params = self.hyp_model.get_params() + self.wc_pref_models[s].get_params()
+    dp = self.get_sym_relaxed_direct_prob(x, y_s, s)
+    cost = -T.log(dp)
+    relaxed_enc_params = []
+    relaxed_enc_params.extend(self.hyp_model.get_params())
+    for i in range(self.num_slots):
+      if i == s:
+        continue
+      print >>sys.stderr, i
+      relaxed_enc_params.extend(self.wc_pref_models[i].get_params())
     params = self.repr_params + relaxed_enc_params + self.rec_params
     g_params = T.grad(cost, params)
     # Updating the parameters only if the norm of the gradient is less than 100.

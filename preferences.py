@@ -2,11 +2,12 @@ import numpy, theano
 from theano import tensor as T
 
 class PreferenceModel(object):
-  def __init__(self, pref_type, modelname, hidden_size, ont_rep, vocab_rep=None, lr_wp_rank = 10):
+  def __init__(self, pref_type, modelname, hidden_size, ont_rep, model_index, vocab_rep=None, lr_wp_rank = 10):
     """
     pref_type (string):  Indicate whether the preference being modeled is word-concept or concept-concept (word_concept, concept_concept)
     modelname (string):  Select the parameterization of the model ('lincomb')
     ont_rep (theano.shared):  Shared ontology representation
+    model_index (str): String that will be added as an identifier to shared variable names for debugging purposes
     vocab_rep (theano.shared):  Shared vocabulary representation (required if pref_type is word-concept)
     """
     if pref_type == 'word_concept':
@@ -35,20 +36,20 @@ class PreferenceModel(object):
       proj_weight_dim = ent1_dim + ent2_dim
       proj_weight_range = numpy.sqrt(6. / (proj_weight_dim + hidden_size))
       init_proj_weight = numpy.asarray(numpy_rng.uniform(low = -proj_weight_range, high = proj_weight_range, size = (proj_weight_dim, hidden_size)))
-      self.proj_weight = theano.shared(value=init_proj_weight, name='P_p')
+      self.proj_weight = theano.shared(value=init_proj_weight, name='P_p_%s'%model_index)
       score_weight_range = numpy.sqrt(6. / hidden_size)
       init_score_weight = numpy.asarray(numpy_rng.uniform(low = -score_weight_range, high = score_weight_range, size = hidden_size))
-      self.score_weight = theano.shared(value=init_score_weight, name='p_s')
+      self.score_weight = theano.shared(value=init_score_weight, name='p_s_%s'%model_index)
       self.params = [self.proj_weight, self.score_weight]
     elif self.modelname == 'weighted_prod':
       init_prod_weight = numpy.asarray(numpy_rng.uniform(low = -1.0, high = 1.0, size = (ent1_dim, ent2_dim)))
-      self.prod_weight = theano.shared(value = init_prod_weight, name = 'P_w')
+      self.prod_weight = theano.shared(value = init_prod_weight, name = 'P_w_%s'%model_index)
       self.params = [self.prod_weight]
     elif self.modelname == 'lr_weighted_prod':
       init_prod_weight1 = numpy.asarray(numpy_rng.uniform(low = -1.0, high = 1.0, size = (ent1_dim, lr_wp_rank)))
       init_prod_weight2 = numpy.asarray(numpy_rng.uniform(low = -1.0, high = 1.0, size = (lr_wp_rank, ent2_dim)))
-      self.prod_weight1 = theano.shared(value = init_prod_weight1, name = 'P_w1')
-      self.prod_weight2 = theano.shared(value = init_prod_weight2, name = 'P_w2')
+      self.prod_weight1 = theano.shared(value = init_prod_weight1, name = 'P_w1_%s'%model_index)
+      self.prod_weight2 = theano.shared(value = init_prod_weight2, name = 'P_w2_%s'%model_index)
       self.params = [self.prod_weight1, self.prod_weight2]
 
   def get_symb_score(self, ent1_ind, ent2_ind):
