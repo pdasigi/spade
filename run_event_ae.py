@@ -101,6 +101,7 @@ if use_pretrained_wordrep:
     if word in pt_word_rep:
       init_wordrep[w_ind[word]] = pt_word_rep[word]
       num_words_covered += 1
+  event_ae.vocab_rep.set_value(init_wordrep)
   print >>sys.stderr, "Using pretrained word representations from %s"%(args.pt_rep)
   print >>sys.stderr, "\tcoverage is %f"%(float(num_words_covered)/len(w_ind))
 
