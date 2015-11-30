@@ -9,6 +9,8 @@ import codecs
 import operator
 import multiprocessing as mp
 
+from nltk.corpus import wordnet as wn
+
 import theano, numpy
 from theano import tensor as T
 from event_ae import EventAE
@@ -95,6 +97,7 @@ comp_starttime = time.time()
 event_ae = EventAE(num_args, vocab_size, ont_size, args.hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=args.word_dim, concept_dim=args.concept_dim, word_rep_param=args.change_word_rep, hyp_model_type=args.hyp_model_type, wc_pref_model_type=args.wc_pref_model_type, cc_pref_model_type=args.cc_pref_model_type, relaxed=args.use_relaxation, wc_lr_wp_rank=args.wc_lr_wp_rank, cc_lr_wp_rank=args.cc_lr_wp_rank)
 
 if use_pretrained_wordrep:
+  print >>sys.stderr, "Using pretrained word representations from %s"%(args.pt_rep)
   num_words_covered = 0
   init_wordrep = event_ae.vocab_rep.get_value()
   for word in w_ind:
@@ -102,8 +105,31 @@ if use_pretrained_wordrep:
       init_wordrep[w_ind[word]] = pt_word_rep[word]
       num_words_covered += 1
   event_ae.vocab_rep.set_value(init_wordrep)
-  print >>sys.stderr, "Using pretrained word representations from %s"%(args.pt_rep)
-  print >>sys.stderr, "\tcoverage is %f"%(float(num_words_covered)/len(w_ind))
+  print >>sys.stderr, "\tcoverage for word representation is %f"%(float(num_words_covered)/len(w_ind))
+  num_syns_covered = 0
+  rep_lemmas_props = []
+  init_ontrep = event_ae.ont_rep.get_value()
+  for syn in c_ind:
+    if len(syn.split(".")) == 3:
+      wn_syn = wn.synset(syn)
+      syn_lemmas = wn_syn.lemma_names()
+      lemma_reps = []
+      for lemma in syn_lemmas:
+        if lemma in pt_word_rep:
+          lemma_reps.append(pt_word_rep[lemma])
+      if len(lemma_reps) == 0:
+        rep_lemmas_props.append(0)
+      else:
+        rep_lemmas_props.append(float(len(lemma_reps))/len(syn_lemmas))
+        init_ontrep[c_ind[syn]] = numpy.mean(lemma_reps, axis=0)
+        num_syns_covered += 1
+    else:
+      if syn in pt_word_rep:
+        init_ontrep[c_ind[syn]] = pt_word_rep[syn]
+        num_syns_covered += 1
+  event_ae.ont_rep.set_value(init_ontrep)
+  print >>sys.stderr, "\tcoverage for ontology representations is %f"%(float(num_syns_covered)/len(c_ind))
+  print >>sys.stderr, "\taverage lemma coverage per synset is %f"%(sum(rep_lemmas_props)/len(rep_lemmas_props))
 
 if args.parallel != 1:
   eaes = [copy.deepcopy(event_ae) for _ in range(args.parallel)]
