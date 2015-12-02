@@ -17,6 +17,8 @@ argparser.add_argument('--vocab_file', type=str, help="Word vocabulary file", de
 argparser.add_argument('--ont_file', type=str, help="Concept vocabulary file", default="ont.txt")
 argparser.add_argument('--use_relaxation', help="Ignore inter-concept preferences and optimize", action='store_true')
 argparser.set_defaults(use_relaxation=False)
+argparser.add_argument('--no_hyp', help="Ignore hypernymy links", action='store_true')
+argparser.set_defaults(no_hyp=False)
 #argparser.add_argument('--pt_rep', type=str, help="File containing pretrained embeddings")
 argparser.add_argument('--use_em', help="Use EM (Default is False)", action='store_true')
 argparser.set_defaults(use_em=False)
@@ -48,7 +50,8 @@ cc_hidden_sizes = [20] * num_args
 train_vocab_file = codecs.open(args.vocab_file, "r", "utf-8")
 train_ont_file = codecs.open(args.ont_file, "r", "utf-8")
 vocab_rep, ont_rep = cPickle.load(open("repr_params_%d.pkl"%args.param_iter, "rb"))
-hyp_params = cPickle.load(open("hyp_params_%d.pkl"%args.param_iter, "rb"))
+if not args.no_hyp:
+  hyp_params = cPickle.load(open("hyp_params_%d.pkl"%args.param_iter, "rb"))
 wcp_params = cPickle.load(open("wcp_params_%d.pkl"%args.param_iter, "rb"))
 if not use_relaxation:
   ccp_params = cPickle.load(open("ccp_params_%d.pkl"%args.param_iter, "rb"))
@@ -157,13 +160,14 @@ print >>sys.stderr, "Ignored an average of %f y cands per data point"%(float(ign
 print >>sys.stderr, len(x_data), len(y_s_data), len(fixed_data)
 
 
-event_ae = EventAE(num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, relaxed=use_relaxation, hyp_model_type=args.hyp_model_type, wc_pref_model_type=args.wc_pref_model_type, cc_pref_model_type=args.cc_pref_model_type)
+event_ae = EventAE(num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, relaxed=use_relaxation, no_hyp=args.no_hyp, wc_pref_model_type=args.wc_pref_model_type, cc_pref_model_type=args.cc_pref_model_type)
 #for i, param in enumerate(repr_params):
 #  event_ae.repr_params[i].set_value(param)
 event_ae.vocab_rep.set_value(vocab_rep)
 event_ae.ont_rep.set_value(ont_rep)
 
-event_ae.hyp_model.set_params(hyp_params)
+if not args.no_hyp:
+  event_ae.hyp_model.set_params(hyp_params)
 for i, param_dict in enumerate(wcp_params):
   for j in param_dict:
     event_ae.wc_pref_models[i][j].set_params(param_dict[j])

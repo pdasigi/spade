@@ -13,7 +13,7 @@ SMALL_NUM = 1e-30
 LOG_SMALL_NUM = numpy.log(SMALL_NUM)
 
 class EventAE(object):
-  def __init__(self, num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=50, concept_dim=50, word_rep_param=False, hyp_model_type="weighted_prod", wc_pref_model_type="tanhlayer", cc_pref_model_type="tanhlayer", relaxed=False, wc_lr_wp_rank=10, cc_lr_wp_rank=10):
+  def __init__(self, num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=50, concept_dim=50, word_rep_param=False, hyp_model_type="weighted_prod", wc_pref_model_type="tanhlayer", cc_pref_model_type="tanhlayer", relaxed=False, no_hyp=False, wc_lr_wp_rank=10, cc_lr_wp_rank=10):
     print >>sys.stderr, "Initializing SPADE"
     print >>sys.stderr, "num_args: %d"%(num_args)
     print >>sys.stderr, "vocab_size: %d"%(vocab_size)
@@ -21,7 +21,10 @@ class EventAE(object):
     print >>sys.stderr, "word_dim: %d"%(word_dim)
     print >>sys.stderr, "concept_dim: %d"%(concept_dim)
     print >>sys.stderr, "word_rep_param: %s"%(word_rep_param)
-    print >>sys.stderr, "hyp_model: %s"%(hyp_model_type)
+    if no_hyp:
+      print >>sys.stderr, "Running without hypernymy links"
+    else:
+      print >>sys.stderr, "hyp_model: %s"%(hyp_model_type)
     print >>sys.stderr, "wc_pref_model: %s"%(wc_pref_model_type)
     if wc_pref_model_type == "lr_weighted_prod":
       print >>sys.stderr, "wc_lr_wp_rank: %d"%(wc_lr_wp_rank)
@@ -45,8 +48,10 @@ class EventAE(object):
     self.repr_params.append(self.ont_rep)
     self.enc_params = []
     self.relaxed = relaxed
-    self.hyp_model = HypernymModel(hyp_model_type, hyp_hidden_size, self.vocab_rep, self.ont_rep)
-    self.enc_params.extend(self.hyp_model.get_params())
+    self.no_hyp = no_hyp
+    if not self.no_hyp:
+      self.hyp_model = HypernymModel(hyp_model_type, hyp_hidden_size, self.vocab_rep, self.ont_rep)
+      self.enc_params.extend(self.hyp_model.get_params())
     self.wc_pref_models = []
     self.cc_pref_models = []
     self.num_slots = num_args + 1 # +1 for the predicate
@@ -75,8 +80,9 @@ class EventAE(object):
   def get_sym_encoder_energy(self, x, y):
     # Works with NCE
     hsum = T.constant(0)
-    for i in range(self.num_slots):
-      hsum += self.hyp_model.get_symb_score(x[i], y[i])
+    if not self.no_hyp:
+      for i in range(self.num_slots):
+        hsum += self.hyp_model.get_symb_score(x[i], y[i])
     p_w_c_sum = T.constant(0)
     for i in range(self.num_slots):
       for j in range(self.num_slots):
@@ -234,7 +240,7 @@ class EventAE(object):
  
   ### Relaxed variant functions ### 
   def get_sym_relaxed_encoder_energy(self, x, y, s):
-    h = self.hyp_model.get_symb_score(x[s], y)
+    h = self.hyp_model.get_symb_score(x[s], y) if not self.no_hyp else T.constant(0.0)
     p_sum = T.constant(0.0)
     # We need to sum up the preference scores of words in all slots except s with y
     for i in range(self.num_slots):
@@ -274,7 +280,8 @@ class EventAE(object):
     dp = self.get_sym_relaxed_direct_prob(x, y_s, s)
     cost = -T.log(dp)
     relaxed_enc_params = []
-    relaxed_enc_params.extend(self.hyp_model.get_params())
+    if not self.no_hyp:
+      relaxed_enc_params.extend(self.hyp_model.get_params())
     for i in range(self.num_slots):
       if i == s:
         continue

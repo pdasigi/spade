@@ -38,6 +38,8 @@ argparser.add_argument('--ont_file', type=str, help="Concept vocabulary file", d
 argparser.add_argument('--parallel', type=int, help="Number of processors to run on (default 1)", default=1)
 argparser.add_argument('--use_relaxation', help="Ignore inter-concept preferences and optimize", action='store_true')
 argparser.set_defaults(use_relaxation=False)
+argparser.add_argument('--no_hyp', help="Ignore hypernymy links", action='store_true')
+argparser.set_defaults(no_hyp=False)
 argparser.add_argument('--use_em', help="Use EM (Default is False)", action='store_true')
 argparser.set_defaults(use_em=False)
 argparser.add_argument('--use_nce', help="Use NCE for estimating encoding probability. (Default is False)", action='store_true')
@@ -94,7 +96,7 @@ vocab_size = len(w_ind)
 ont_size = len(c_ind)
 
 comp_starttime = time.time()
-event_ae = EventAE(num_args, vocab_size, ont_size, args.hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=args.word_dim, concept_dim=args.concept_dim, word_rep_param=args.change_word_rep, hyp_model_type=args.hyp_model_type, wc_pref_model_type=args.wc_pref_model_type, cc_pref_model_type=args.cc_pref_model_type, relaxed=args.use_relaxation, wc_lr_wp_rank=args.wc_lr_wp_rank, cc_lr_wp_rank=args.cc_lr_wp_rank)
+event_ae = EventAE(num_args, vocab_size, ont_size, args.hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=args.word_dim, concept_dim=args.concept_dim, word_rep_param=args.change_word_rep, hyp_model_type=args.hyp_model_type, wc_pref_model_type=args.wc_pref_model_type, cc_pref_model_type=args.cc_pref_model_type, relaxed=args.use_relaxation, no_hyp=args.no_hyp, wc_lr_wp_rank=args.wc_lr_wp_rank, cc_lr_wp_rank=args.cc_lr_wp_rank)
 
 if use_pretrained_wordrep:
   print >>sys.stderr, "Using pretrained word representations from %s"%(args.pt_rep)
@@ -155,12 +157,12 @@ def synchronize_param():
   event_ae.set_repr_params(avg_repr_params)
   for eae in eaes:
     eae.set_repr_params(avg_repr_params)
-
-  all_hyp_params = [ [param.get_value() for param in eae.hyp_model.get_params()] for eae in eaes ]
-  avg_hyp_params = [numpy.mean(param, axis=0) for param in zip(*all_hyp_params)]
-  event_ae.hyp_model.set_params(avg_hyp_params)
-  for eae in eaes:
-    eae.hyp_model.set_params(avg_hyp_params)
+  if not no_hyp:
+    all_hyp_params = [ [param.get_value() for param in eae.hyp_model.get_params()] for eae in eaes ]
+    avg_hyp_params = [numpy.mean(param, axis=0) for param in zip(*all_hyp_params)]
+    event_ae.hyp_model.set_params(avg_hyp_params)
+    for eae in eaes:
+      eae.hyp_model.set_params(avg_hyp_params)
   #TODO: Fix averaging wcp_params given the new dict structure
   all_worker_model_wcp_params = [ [[param.get_value() for param in wcp_model.get_params()] for wcp_model in eae.wc_pref_models] for eae in eaes]
   for model_num, all_model_wcp_params in enumerate(zip(*all_worker_model_wcp_params)):
@@ -269,10 +271,11 @@ for num_iter in range(args.max_iter):
     repr_params = [event_ae.vocab_rep.get_value(), event_ae.ont_rep.get_value()]
     cPickle.dump(repr_params, repr_param_out)
     repr_param_out.close()
-    hyp_param_out = open("hyp_params_%d.pkl"%(num_iter + 1), "wb")
-    hyp_params = [param.get_value() for param in event_ae.hyp_model.get_params()]
-    cPickle.dump(hyp_params, hyp_param_out)
-    hyp_param_out.close()
+    if not args.no_hyp:
+      hyp_param_out = open("hyp_params_%d.pkl"%(num_iter + 1), "wb")
+      hyp_params = [param.get_value() for param in event_ae.hyp_model.get_params()]
+      cPickle.dump(hyp_params, hyp_param_out)
+      hyp_param_out.close()
     wcp_param_out = open("wcp_params_%d.pkl"%(num_iter + 1), "wb")
     wcp_params = [{ i: [param.get_value() for param in wcp_models[i].get_params()] for i in wcp_models} for wcp_models in event_ae.wc_pref_models]
     cPickle.dump(wcp_params, wcp_param_out)
