@@ -65,9 +65,9 @@ init_hyp_strengths = None
 if args.rec_model_type == "multinomial":
   init_hyp_strengths = numpy.zeros((len(c_ind), len(w_ind)))
   for word in w_h_map:
-    word_ind = w_ind[word]
+    word_ind = w_ind[word] if word in w_ind else 0
     for concept in w_h_map[word]:
-      concept_ind = c_ind[concept]
+      concept_ind = c_ind[concept] if concept in c_ind else 0
       init_hyp_strengths[concept_ind][word_ind] = 1.0
 
 if len(w_oov) != 0:
@@ -118,7 +118,7 @@ if use_pretrained_wordrep:
       num_words_covered += 1
   event_ae.vocab_rep.set_value(init_wordrep)
   print >>sys.stderr, "\tcoverage for word representation is %f"%(float(num_words_covered)/len(w_ind))
-  num_syns_covered = 0
+  """num_syns_covered = 0
   rep_lemmas_props = []
   init_ontrep = event_ae.ont_rep.get_value()
   for syn in c_ind:
@@ -141,7 +141,7 @@ if use_pretrained_wordrep:
         num_syns_covered += 1
   event_ae.ont_rep.set_value(init_ontrep)
   print >>sys.stderr, "\tcoverage for ontology representations is %f"%(float(num_syns_covered)/len(c_ind))
-  print >>sys.stderr, "\taverage lemma coverage per synset is %f"%(sum(rep_lemmas_props)/len(rep_lemmas_props))
+  print >>sys.stderr, "\taverage lemma coverage per synset is %f"%(sum(rep_lemmas_props)/len(rep_lemmas_props))"""
 
 if args.parallel != 1:
   eaes = [copy.deepcopy(event_ae) for _ in range(args.parallel)]
