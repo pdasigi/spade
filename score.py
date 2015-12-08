@@ -27,6 +27,7 @@ argparser.set_defaults(use_nce=False)
 argparser.add_argument('--hyp_model_type', type=str, help="Hypernymy model (weighted_prod, linlayer, tanhlayer)", default="weighted_prod")
 argparser.add_argument('--wc_pref_model_type', type=str, help="Word-concept preference model (weighted_prod, linlayer, tanhlayer)", default="tanhlayer")
 argparser.add_argument('--cc_pref_model_type', type=str, help="Concept-concept preference model (weighted_prod, linlayer, tanhlayer)", default="tanhlayer")
+argparser.add_argument('--rec_model_type', type=str, help="Reconstruction model (gaussian, multinomial)", default="gaussian")
 argparser.add_argument('--param_iter', type=int, help="Iteration of learned param to use (default 1)", default=1)
 args = argparser.parse_args()
 
@@ -56,6 +57,10 @@ wcp_params = cPickle.load(open("wcp_params_%d.pkl"%args.param_iter, "rb"))
 if not use_relaxation:
   ccp_params = cPickle.load(open("ccp_params_%d.pkl"%args.param_iter, "rb"))
 rec_params = cPickle.load(open("rec_params_%d.pkl"%args.param_iter, "rb"))
+if args.rec_model_type == "multinomial":
+  init_hyp_strengths = rec_params[0]
+else:
+  init_hyp_strengths = None
 
 _, word_dim = vocab_rep.shape
 word_rep_min, word_rep_max = vocab_rep.min(), vocab_rep.max()
@@ -160,7 +165,7 @@ print >>sys.stderr, "Ignored an average of %f y cands per data point"%(float(ign
 print >>sys.stderr, len(x_data), len(y_s_data), len(fixed_data)
 
 
-event_ae = EventAE(num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, relaxed=use_relaxation, no_hyp=args.no_hyp, wc_pref_model_type=args.wc_pref_model_type, cc_pref_model_type=args.cc_pref_model_type)
+event_ae = EventAE(num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, relaxed=use_relaxation, no_hyp=args.no_hyp, wc_pref_model_type=args.wc_pref_model_type, cc_pref_model_type=args.cc_pref_model_type, rec_model_type=args.rec_model_type, init_hyp_strengths=init_hyp_strengths)
 #for i, param in enumerate(repr_params):
 #  event_ae.repr_params[i].set_value(param)
 event_ae.vocab_rep.set_value(vocab_rep)

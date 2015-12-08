@@ -13,7 +13,7 @@ SMALL_NUM = 1e-30
 LOG_SMALL_NUM = numpy.log(SMALL_NUM)
 
 class EventAE(object):
-  def __init__(self, num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=50, concept_dim=50, word_rep_param=False, hyp_model_type="weighted_prod", wc_pref_model_type="tanhlayer", cc_pref_model_type="tanhlayer", relaxed=False, no_hyp=False, wc_lr_wp_rank=10, cc_lr_wp_rank=10):
+  def __init__(self, num_args, vocab_size, ont_size, hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=50, concept_dim=50, word_rep_param=False, hyp_model_type="weighted_prod", wc_pref_model_type="tanhlayer", cc_pref_model_type="tanhlayer", rec_model_type="gaussian", init_hyp_strengths=None, relaxed=False, no_hyp=False, wc_lr_wp_rank=10, cc_lr_wp_rank=10):
     print >>sys.stderr, "Initializing SPADE"
     print >>sys.stderr, "num_args: %d"%(num_args)
     print >>sys.stderr, "vocab_size: %d"%(vocab_size)
@@ -34,6 +34,7 @@ class EventAE(object):
       print >>sys.stderr, "cc_pref_model: %s"%(cc_pref_model_type)
       if cc_pref_model_type == "lr_weighted_prod":
         print >>sys.stderr, "cc_lr_wp_rank: %d"%(cc_lr_wp_rank)
+    print >>sys.stderr, "rec_model: %s"%rec_model_type
 
     numpy_rng = numpy.random.RandomState(12345)
     self.theano_rng = RandomStreams(12345)
@@ -69,7 +70,7 @@ class EventAE(object):
         cc_pref_model = PreferenceModel('concept_concept', cc_pref_model_type, cc_hidden_sizes[i], self.ont_rep, "cc_%d"%i,  lr_wp_rank=cc_lr_wp_rank)
         self.cc_pref_models.append(cc_pref_model)
         self.enc_params.extend(cc_pref_model.get_params())
-    self.rec_model = ReconstructionModel(self.ont_rep, self.vocab_rep)
+    self.rec_model = ReconstructionModel(self.ont_rep, self.vocab_rep, init_hyp_strengths=init_hyp_strengths, rec_model_type=rec_model_type)
     self.rec_params = self.rec_model.get_params()
     # Random y, sampled from uniform(|ont|^num_slots)
     self.y_r = T.cast(self.theano_rng.uniform(low=0, high=self.ont_size-1, size=(self.num_slots,)), 'int32')

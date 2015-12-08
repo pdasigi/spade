@@ -47,6 +47,7 @@ argparser.set_defaults(use_nce=False)
 argparser.add_argument('--hyp_model_type', type=str, help="Hypernymy model (weighted_prod, linlayer, tanhlayer)", default="weighted_prod")
 argparser.add_argument('--wc_pref_model_type', type=str, help="Word-concept preference model (weighted_prod, linlayer, tanhlayer)", default="tanhlayer")
 argparser.add_argument('--cc_pref_model_type', type=str, help="Concept-concept preference model (weighted_prod, linlayer, tanhlayer)", default="tanhlayer")
+argparser.add_argument('--rec_model_type', type=str, help="Reconstruction model (gaussian, multinomial)", default="gaussian")
 args = argparser.parse_args()
 pred_arg_pos = args.word_types.split("_")
 learning_rate = args.lr
@@ -59,6 +60,15 @@ dp = DataProcessor(pred_arg_pos)
 x_data, y_s_data, w_ind, c_ind, w_h_map, w_oov, c_oov = dp.make_data(args.train_file, relaxed=args.use_relaxation)
 rev_w_ind = {ind:word for word, ind in w_ind.items()}
 rev_c_ind = {ind:concept for concept, ind in c_ind.items()}
+
+init_hyp_strengths = None
+if args.rec_model_type == "multinomial":
+  init_hyp_strengths = numpy.zeros((len(c_ind), len(w_ind)))
+  for word in w_h_map:
+    word_ind = w_ind[word]
+    for concept in w_h_map[word]:
+      concept_ind = c_ind[concept]
+      init_hyp_strengths[concept_ind][word_ind] = 1.0
 
 if len(w_oov) != 0:
   print >>sys.stderr, "Regarding %d words as OOV"%(len(w_oov))
@@ -96,7 +106,7 @@ vocab_size = len(w_ind)
 ont_size = len(c_ind)
 
 comp_starttime = time.time()
-event_ae = EventAE(num_args, vocab_size, ont_size, args.hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=args.word_dim, concept_dim=args.concept_dim, word_rep_param=args.change_word_rep, hyp_model_type=args.hyp_model_type, wc_pref_model_type=args.wc_pref_model_type, cc_pref_model_type=args.cc_pref_model_type, relaxed=args.use_relaxation, no_hyp=args.no_hyp, wc_lr_wp_rank=args.wc_lr_wp_rank, cc_lr_wp_rank=args.cc_lr_wp_rank)
+event_ae = EventAE(num_args, vocab_size, ont_size, args.hyp_hidden_size, wc_hidden_sizes, cc_hidden_sizes, word_dim=args.word_dim, concept_dim=args.concept_dim, word_rep_param=args.change_word_rep, hyp_model_type=args.hyp_model_type, wc_pref_model_type=args.wc_pref_model_type, cc_pref_model_type=args.cc_pref_model_type, rec_model_type=args.rec_model_type, init_hyp_strengths=init_hyp_strengths, relaxed=args.use_relaxation, no_hyp=args.no_hyp, wc_lr_wp_rank=args.wc_lr_wp_rank, cc_lr_wp_rank=args.cc_lr_wp_rank)
 
 if use_pretrained_wordrep:
   print >>sys.stderr, "Using pretrained word representations from %s"%(args.pt_rep)
